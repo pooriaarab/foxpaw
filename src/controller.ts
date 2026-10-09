@@ -8,6 +8,7 @@ import { words } from "./choosers/rule.js";
 import { firstDate, formatDate, readDate } from "./dates.js";
 import { parseGoal, type Requirement } from "./goal.js";
 import { nearlyNames } from "./match.js";
+import { allowedBy } from "./safety.js";
 import type { ActRequest, ActResult, Control, Snapshot } from "./types.js";
 
 /** Scores below this are not acted on. */
@@ -17,7 +18,6 @@ export const PICKER_TURNS = 24;
 /** Stale or navigated refusals in a row before the run gives up. */
 export const STALE_LIMIT = 3;
 
-const UNSAFE = /\b(delete|remove|buy|purchase|pay|place order|checkout|close account|cancel (?:account|subscription)|unsubscribe|sign out|log out)\b/i;
 const SEND = /^(submit|send|search|go|continue|next|sign up|register|book|save|apply|subscribe|create account|done)\b/i;
 const TYPABLE = new Set(["textbox", "searchbox", "spinbutton"]);
 
@@ -88,7 +88,7 @@ const keyOf = (page: Snapshot, c: Control) => `${docOf(page, c.frameId)}#${c.id}
 const formOf = (page: Snapshot, c: Control) => (c.form === undefined ? keyOf(page, c) : `${docOf(page, c.frameId)}#${c.frameId}:form${c.form}`);
 const typable = (c: Control) => TYPABLE.has(c.role) || (c.role === "combobox" && c.tag === "input");
 const dated = (c: Control) => typable(c) && (c.picker || !!c.dateFormat || c.type === "date");
-const unsafe = (c: Control, goal: string) => UNSAFE.test(c.label) && !goal.toLowerCase().includes(UNSAFE.exec(c.label)![1]!.toLowerCase());
+const unsafe = (c: Control, goal: string) => !allowedBy(c.label, goal);
 
 export async function decide(state: RunState, page: Snapshot, chooser: Chooser): Promise<Next> {
   if (state.history.length >= state.maxSteps) return { kind: "blocked", reason: "step limit reached" };

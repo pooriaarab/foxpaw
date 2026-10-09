@@ -48,6 +48,10 @@ the code that makes them pass.
 | C11 | The run never ends, or ends early. | It ends `done` when nothing is left. It ends `blocked` at the step cap, or after 3 stale refusals in a row. | Isolated `tests/controller.test.ts` |
 | C12 | The page shows a captcha. The run tries to solve it. | The run stops with `blocked: "captcha"` before any action. | Isolated `tests/controller.test.ts`, E2E `captcha page is blocked` |
 | C13 | A control deletes, buys or pays. The run clicks it because it scored well. | The controller never picks such a control unless the goal names it. | Isolated `tests/controller.test.ts` |
+| C14 | A risky label uses another word form: "Place your order", "Confirm payment", "Check out", "Payment". | Risky labels match by word stem and phrase, not one fixed word. | Isolated `tests/safety.test.ts` |
+| C15 | The goal holds the risky word only inside an email or a URL ("me@paypal.com"), or after a negation ("do not buy anything"). | Only a whole word in the goal's own text allows the action. Emails, URLs and quoted text do not count. A "not", "never", "no" or "without" earlier in the same clause blocks it. | Isolated `tests/safety.test.ts` |
+| C16 | The form to send has a risky submit button ("Pay now"). | The run stops with `blocked` and names the button. | Isolated `tests/controller.test.ts` |
+| C17 | The run presses Enter in a form whose only submit button is hidden. The hidden button is clicked. | `act` with `enter` refuses with `hidden` when the form's submit button is hidden. | E2E `enter refuses a hidden submit button` |
 
 ## glinerChooser: a foxmind model behind the Chooser
 
