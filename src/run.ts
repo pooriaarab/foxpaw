@@ -3,7 +3,7 @@
 // shape of foxpilot's run_task result, so foxbench can score either.
 import type { Chooser } from "./choosers/chooser.js";
 import { ruleChooser } from "./choosers/rule.js";
-import { decide, record, start, type StepRecord } from "./controller.js";
+import { confirmSend, decide, record, start, type StepRecord } from "./controller.js";
 import { groupTab } from "./tabgroup.js";
 import { act, api, settle, snapshot, type ScriptingApi } from "./tab.js";
 import type { Snapshot } from "./types.js";
@@ -99,6 +99,7 @@ export async function runTask(tabId: number, goal: string, options: RunOptions =
       if (next.effect === "send" && outcome.ok) await sleep(250);
       await settle(tabId, { frameId: next.control.frameId, ...(next.effect === "list" ? { listFor: next.control.node } : {}) }, browser);
       page = await readTab(tabId, browser);
+      if (next.effect === "send" && sentFrom) confirmSend(state, sentFrom, page);
     }
   } catch (error) {
     result.status = "error";
