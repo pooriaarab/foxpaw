@@ -11,3 +11,4 @@ export { problemOf, verify, type Check, type Verdict } from "./verify.js";
 export { runTask, type RunOptions, type RunResult } from "./run.js";
 export { groupTab, type TabGroupStatus } from "./tabgroup.js";
 export { glinerChooser, LABEL_CAP, type MindLike } from "./choosers/gliner.js";
+export { allowedBy, risky } from "./safety.js";

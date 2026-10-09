@@ -117,6 +117,12 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       if (on() !== (op === "check")) click();
       if (on() !== (op === "check")) return { ok: false, reason: "unsupported", detail: "the state did not change" };
     } else if (op === "enter") {
+      // Enter would press the form's first submit button. A hidden one is not
+      // what a person sees, and its label was never checked: refuse.
+      const first = input.form && [...input.form.elements].find((b) => (b as HTMLButtonElement).type === "submit");
+      if (first && !first.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+        return { ok: false, reason: "hidden", detail: "the form's submit button is hidden" };
+      }
       e.focus({ preventScroll: true });
       const init = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
       const down = e.dispatchEvent(new KeyboardEvent("keydown", init));

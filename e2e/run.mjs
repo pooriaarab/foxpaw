@@ -48,6 +48,8 @@ try {
   check("stale check refuses a changed page", { reason: "stale", last: "none" }, { reason: stale.reason, last: await text("last") });
   check("covered control is refused", "covered", (await act("Covered button", { op: "click" })).reason);
   check("disabled submit is refused", "disabled", (await act("Apply", { op: "click" })).reason);
+  const hiddenPay = await act("Voucher", { op: "enter" });
+  check("enter refuses a hidden submit button", { reason: "hidden", url: true }, { reason: hiddenPay.reason, url: page.url().endsWith("/act.html") });
   await act("City", { op: "type", value: "Paris" });
   const city = (await call("act.html", "snapshot")).controls.find((c) => c.label === "City");
   const listWait = await call("act.html", "settle", { listFor: city.node, frameId: city.frameId });
