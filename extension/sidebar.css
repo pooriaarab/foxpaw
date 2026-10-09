@@ -1,0 +1,20 @@
+:root { color-scheme: light dark; font: 14px/1.45 system-ui, sans-serif; }
+body { margin: 0; padding: 12px 14px; }
+h1 { margin: 0; font-size: 20px; color: #e25920; }
+h2 { margin: 16px 0 6px; font-size: 14px; }
+header p, .note { margin: 4px 0 10px; color: GrayText; }
+label { display: block; font-weight: 600; }
+textarea { box-sizing: border-box; width: 100%; margin: 4px 0 8px; font: inherit; }
+fieldset { margin: 0 0 10px; border: 1px solid #8884; border-radius: 6px; }
+fieldset label { font-weight: 400; }
+button { padding: 6px 16px; border: 0; border-radius: 6px; background: #e25920; color: #fff; font: inherit; font-weight: 600; }
+button:disabled { opacity: 0.6; }
+ol, ul { margin: 0; padding-left: 20px; }
+li { margin: 2px 0; }
+li.refused { color: #c50042; }
+#checks { list-style: none; padding: 0; }
+#checks li::before { margin-right: 6px; }
+#checks li.ok::before { content: "✓"; color: #058b00; }
+#checks li.bad::before { content: "✗"; color: #c50042; }
+#status.done { color: #058b00; }
+#status.bad { color: #c50042; }
