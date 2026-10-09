@@ -66,6 +66,28 @@ try {
   const news = embedded.controls.find((c) => c.label === "Newsletter email");
   const typed = await call("frames.html", "act", news, { op: "type", value: "sam@example.com" }, await call("frames.html", "snapshot"));
   check("iframe form is read and filled", { frame: true, value: "sam@example.com" }, { frame: news.frameId !== 0, value: typed.value });
+
+  // Run: snapshot -> choose -> stale check -> act -> settle -> verify, with ruleChooser.
+  const runs = (record.runs = {});
+  const run = async (path, goal) => {
+    await open(path);
+    const result = await call(path, "run", goal);
+    runs[path] = result;
+    return result;
+  };
+  const booked = await run("form.html", "Name: Sam Lee, email: sam@example.com, from San Francisco, depart December 3, 2026, cabin Business, accept the terms");
+  check("form run is verified", { status: "done", verified: true }, { status: booked.status, verified: booked.verified });
+  const sent = new URL(booked.url).searchParams;
+  check("form run sent every value", ["Sam Lee", "sam@example.com", "San Francisco, CA", "Thu, Dec 3, 2026", "Business", "on"],
+    [sent.get("name"), sent.getAll("email").join(""), sent.get("from"), sent.get("depart"), sent.get("cabin"), sent.get("terms")]);
+  check("hidden duplicates stay empty", ["", ""], [sent.getAll("email")[0], sent.get("email-copy")]);
+  check("driven tab is in a foxpaw tab group", true, (booked.group ?? "").startsWith("foxpaw · "));
+  const failed = await run("signup.html", "email: sam@example.com");
+  check("error page is not verified", { status: "done", verified: false, problem: "error page" }, { status: failed.status, verified: failed.verified, problem: failed.problem });
+  const captcha = await run("captcha.html", "email: sam@example.com");
+  check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
+  const newsRun = await run("frames.html", "Newsletter email: sam@example.com");
+  check("iframe form run is verified", { status: "done", verified: true, sent: true }, { status: newsRun.status, verified: newsRun.verified, sent: newsRun.steps.some((s) => s.submitted) });
 } catch (error) {
   record.error = error instanceof Error ? error.stack ?? error.message : String(error);
 } finally {
