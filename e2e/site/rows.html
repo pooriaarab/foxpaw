@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Invoices</title></head>
+  <body>
+    <h1>Invoices</h1>
+    <ul id="rows"></ul>
+    <p>Archived: <output id="archived">none</output></p>
+    <script>
+      // A list without keys (P11): removing a row moves the next rows' text
+      // into the same nodes and drops the last node, as keyless renders do.
+      let invoices = ["Invoice A", "Invoice B", "Invoice C"];
+      const list = document.getElementById("rows");
+      const render = () => {
+        while (list.children.length > invoices.length) list.lastElementChild.remove();
+        invoices.forEach((name, i) => {
+          let li = list.children[i];
+          if (!li) {
+            li = document.createElement("li");
+            const span = document.createElement("span");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = "Archive";
+            button.addEventListener("click", () => { document.getElementById("archived").textContent = li.firstChild.textContent; });
+            li.append(span, " ", button);
+            list.append(li);
+          }
+          li.firstChild.textContent = name;
+        });
+      };
+      render();
+      window.dropFirst = () => { invoices = invoices.slice(1); render(); };
+    </script>
+  </body>
+</html>
