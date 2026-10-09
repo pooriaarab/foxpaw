@@ -26,7 +26,7 @@ function mind(best: (labels: string[]) => string, top = 0.9) {
       const names = Object.keys(labels);
       calls.push({ labels: names });
       const winner = best(names);
-      return { scores: [Object.fromEntries(names.map((l) => [l, l === winner ? top : (1 - top) / Math.max(1, names.length - 1)]))] };
+      return { scores: [Object.fromEntries(names.map((l) => [l, l === winner ? top : top / 2]))] };
     },
   };
   return { fake, calls };
