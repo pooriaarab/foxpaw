@@ -57,7 +57,7 @@ button to open the sidebar. Type a goal for the current tab, then click **Run**.
 | Builders of form-filling helpers | An extension that fills a job or travel form from saved details | `runTask` matches each value to the right field, picks autocomplete options and dates, and reports what it filled. |
 | Accessibility tool makers | A voice or switch control that says "set the cabin to Business" | `snapshot` gives each control's role, accessible name and state. `act` does the click or the typing for the user. |
 | QA testers | Smoke tests that fill a form in real Firefox and assert the outcome | `verify` returns a checklist and flags error, empty and captcha pages, so a test fails for the right reason. |
-| Other agents that need a reliable hand | A planner (foxloop, or your own LLM loop) that decides what to do | `act` runs only on the exact document the planner saw. It returns `stale` instead of clicking the wrong control. |
+| Other agents that need a reliable hand | A planner (foxloop, or your own LLM loop) that decides what to do | `act` runs only on the exact document the planner saw. When the control, its row or the page changed after the decision, it returns `stale` and does not click. |
 | Data entry teams | A tool that types rows from a sheet into a web form, one row at a time | One goal per row. Each run says `verified` or lists the field that did not take the value. |
 | Benchmark authors | A foxbench adapter that scores foxpaw against other agents | `runTask` returns the same result shape as foxpilot's `run_task`: status, verified, checks and steps. |
 
@@ -87,8 +87,10 @@ flowchart LR
    autocomplete option that names the value, page a date picker to the right
    month, and send the form at the end.
 4. `act` runs in the exact document the snapshot read (`documentId`, Firefox
-   153). It first compares the control and the frame with the snapshot. When
-   they differ, it returns `stale` and does not touch the page.
+   153). It first compares the control, the text of its row or card, and the
+   frame's fields with the snapshot. When they differ, it returns `stale` and
+   does not touch the page. A change it does not compare, such as other page
+   text, does not stop it.
 5. `settle` waits until the DOM is quiet for 120 ms, at most 1.5 s.
 6. `verify` checks each value, date and setting, checks that the run sent the
    form it filled, and checks that the page is not an error, empty or captcha

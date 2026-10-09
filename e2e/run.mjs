@@ -58,6 +58,14 @@ try {
   const busyWait = await call("act.html", "settle", {});
   check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
 
+  const rows = await open("rows.html");
+  const listed = await call("rows.html", "snapshot");
+  const archiveA = listed.controls.find((c) => c.label === "Archive");
+  await rows.evaluate("window.dropFirst()");
+  const reused = await call("rows.html", "act", archiveA, { op: "click" }, listed);
+  check("stale check sees a reused row", { reason: "stale", archived: "none" },
+    { reason: reused.reason, archived: await rows.evaluate(() => document.getElementById("archived").textContent) });
+
   await open("frames.html");
   const embedded = await call("frames.html", "snapshot");
   const search = embedded.controls.find((c) => c.label === "Search the docs");
