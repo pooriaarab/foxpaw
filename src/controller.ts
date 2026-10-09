@@ -56,6 +56,8 @@ export interface RunState {
   filled: Set<string>;
   tried: Set<string>;
   sentForms: Set<string>;
+  /** A send that fired no submit event; confirmSend decides from the page after it. */
+  pendingSend: string | null;
   sent: boolean;
   stale: number;
   history: StepRecord[];
@@ -76,7 +78,7 @@ export async function start(goal: string, chooser: Chooser, today = new Date(), 
   return {
     goal, requirements, submit: parsed.submit, today, maxSteps: options.maxSteps ?? 40,
     status: requirements.map(() => "pending"), unmatched: [], taken: new Map(), refused: new Set(), awaiting: null,
-    pickerTurns: 0, filled: new Set(), tried: new Set(), sentForms: new Set(), sent: false, stale: 0, history: [], refusals: [],
+    pickerTurns: 0, filled: new Set(), tried: new Set(), sentForms: new Set(), pendingSend: null, sent: false, stale: 0, history: [], refusals: [],
   };
 }
 
@@ -218,10 +220,10 @@ export function record(state: RunState, next: Extract<Next, { kind: "act" }>, re
   state.stale = 0;
   if (effect === "send") {
     state.tried.add(next.form!);
-    if (result.submitted || !control.submit) {
+    if (result.submitted) {
       state.sentForms.add(next.form!);
       state.sent = true;
-    }
+    } else state.pendingSend = next.form!;
     return;
   }
   if (effect === "page-picker") {
@@ -240,4 +242,21 @@ export function record(state: RunState, next: Extract<Next, { kind: "act" }>, re
     state.awaiting = { kind: "picker", index: index!, controlId: control.id };
     state.pickerTurns = 0;
   } else state.status[index!] = "done";
+}
+
+const topFrame = (page: Snapshot) => page.frames.find((f) => f.frameId === 0);
+
+/**
+ * After a send with no submit event: it counts as sent only when the top
+ * frame's address or document changed between `before` and `after`.
+ */
+export function confirmSend(state: RunState, before: Snapshot, after: Snapshot): void {
+  const form = state.pendingSend;
+  state.pendingSend = null;
+  if (!form) return;
+  const [was, now] = [topFrame(before), topFrame(after)];
+  if (before.url !== after.url || was?.documentId !== now?.documentId || was?.key.slice(0, 24) !== now?.key.slice(0, 24)) {
+    state.sentForms.add(form);
+    state.sent = true;
+  }
 }

@@ -1,7 +1,7 @@
 // C3-C13: the controller's rules, on hand-built snapshots, with ruleChooser.
 import { describe, expect, it } from "vitest";
 import { ruleChooser } from "../src/choosers/rule.js";
-import { decide, record, start, type Next, type RunState } from "../src/controller.js";
+import { confirmSend, decide, record, start, type Next, type RunState } from "../src/controller.js";
 import type { ActResult, Control, Snapshot } from "../src/types.js";
 
 const TODAY = new Date(2026, 8, 25);
@@ -168,5 +168,27 @@ describe("controller", () => {
     const state = await start("email: me@paypal.com", chooser, TODAY);
     await step(state, page([email, pay]));
     expect(target(await step(state, page([email, pay])))).toBe('blocked: sending presses "Pay now", which the goal does not ask for');
+  });
+
+  it("counts a send only with a submit event or a page change (V9)", async () => {
+    const box = c("Search", { role: "searchbox", form: undefined });
+    const state = await start("search: tab groups", chooser, TODAY);
+    await step(state, page([box]));
+    const before = page([{ ...box, value: "tab groups" }]);
+    const enter = await step(state, before, { ok: true });
+    expect(enter.kind === "act" && enter.operation).toBe("PRESS_ENTER");
+    confirmSend(state, before, before);
+    expect(state.sent).toBe(false);
+    expect(target(await decide(state, before, chooser))).toBe("blocked: the form did not send");
+  });
+
+  it("counts a send when the page address changed after it (V9)", async () => {
+    const box = c("Search", { role: "searchbox", form: undefined });
+    const state = await start("search: tab groups", chooser, TODAY);
+    await step(state, page([box]));
+    const before = page([{ ...box, value: "tab groups" }]);
+    await step(state, before, { ok: true });
+    confirmSend(state, before, page([], { url: "http://fixture/?q=tab+groups", frames: [{ frameId: 0, url: "http://fixture/?q=tab+groups", key: "k2", documentId: "doc" }] }));
+    expect(state.sent).toBe(true);
   });
 });

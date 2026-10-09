@@ -86,6 +86,9 @@ try {
   check("driven tab is in a foxpaw tab group", true, (booked.group ?? "").startsWith("foxpaw · "));
   const failed = await run("signup.html", "email: sam@example.com");
   check("error page is not verified", { status: "done", verified: false, problem: "error page" }, { status: failed.status, verified: failed.verified, problem: failed.problem });
+  const nowhere = await run("search.html", "search: tab groups");
+  check("a send with no effect is not verified", { status: "blocked", reason: "the form did not send", verified: false },
+    { status: nowhere.status, reason: nowhere.blockedReason, verified: nowhere.verified });
   const captcha = await run("captcha.html", "email: sam@example.com");
   check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
   const newsRun = await run("frames.html", "Newsletter email: sam@example.com");

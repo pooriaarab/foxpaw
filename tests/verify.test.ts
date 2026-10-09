@@ -103,4 +103,23 @@ describe("verify", () => {
     const verdict = await verify(page([c("Email")]), state);
     expect(verdict.checks.map((k) => [k.part, k.ok])).toEqual([["to: Boston", false], ["Form sent", true]]);
   });
+
+  it("fails Form sent when the run tried but nothing was sent (V9)", async () => {
+    const state = await run("email: sam@example.com", false);
+    state.tried.add("doc#0:form1");
+    const verdict = await verify(page([c("Email", { value: "sam@example.com" })]), state);
+    expect(verdict.checks.at(-1)).toEqual({ part: "Form sent", ok: false, evidence: "the run tried to send the form, but no submit event fired and the page did not change" });
+    expect(verdict.verified).toBe(false);
+  });
+
+  it("reads a clicked toggle's state after the run (V10)", async () => {
+    const state = await run("dark mode", true);
+    const toggle = c("Dark mode", { role: "switch", form: undefined, checked: false });
+    state.history.push({ step: 1, operation: "CLICK", action: "Dark mode", controlId: toggle.id, requirement: "dark mode", text: null, ok: true });
+    expect(ok((await verify(page([toggle]), state)).checks)["dark mode"]).toBe(false);
+    const plain = c("Open settings", { role: "button", form: undefined });
+    const opened = await run("open settings", true);
+    opened.history.push({ step: 1, operation: "CLICK", action: "Open settings", controlId: plain.id, requirement: "open settings", text: null, ok: true });
+    expect(ok((await verify(page([plain]), opened)).checks)["open settings"]).toBe(true);
+  });
 });
