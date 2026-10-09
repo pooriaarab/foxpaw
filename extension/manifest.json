@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "foxpaw demo",
-  "version": "0.1.1",
+  "name": "foxpaw — act on a page and check the result",
+  "version": "0.1.2",
   "description": "Read a web page, act on it like a person, and check the result, from a Firefox extension.",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "foxpaw@pooriaarab",
@@ -27,10 +32,18 @@
     ]
   },
   "action": {
-    "default_title": "foxpaw demo"
+    "default_title": "foxpaw",
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    }
   },
   "sidebar_action": {
-    "default_title": "foxpaw demo",
-    "default_panel": "sidebar.html"
+    "default_title": "foxpaw",
+    "default_panel": "sidebar.html",
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    }
   }
 }
