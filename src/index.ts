@@ -1,2 +1,3 @@
-// The public API of foxpaw. Replace this export with the real one.
-export const name = "foxpaw";
+// The public API of foxpaw.
+export { snapshot, type ScriptingApi } from "./tab.js";
+export type * from "./types.js";
