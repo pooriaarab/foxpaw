@@ -1,6 +1,6 @@
 // The demo sidebar. It runs foxpaw on a tab. The E2E test calls the same
 // functions through window.foxpaw.
-import { snapshot } from "../src/index.ts";
+import { act, settle, snapshot } from "../src/index.ts";
 
 /** The id of the first tab whose address starts with `prefix`. */
 async function tabFor(prefix) {
@@ -10,4 +10,4 @@ async function tabFor(prefix) {
   return tab.id;
 }
 
-window.foxpaw = { snapshot, tabFor };
+window.foxpaw = { snapshot, act, settle, tabFor };

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Embedded forms</title></head>
+  <body>
+    <h1>Embedded forms</h1>
+    <fox-search></fox-search>
+    <p id="searched">Searched for: <output id="query"></output></p>
+    <iframe src="frame-form.html" title="Newsletter" width="420" height="160"></iframe>
+    <script>
+      // A web component with its field in an open shadow root (P3).
+      customElements.define("fox-search", class extends HTMLElement {
+        connectedCallback() {
+          const root = this.attachShadow({ mode: "open" });
+          const label = document.createElement("label");
+          label.textContent = "Search the docs ";
+          const input = document.createElement("input");
+          input.type = "search";
+          label.append(input);
+          const go = document.createElement("button");
+          go.textContent = "Search";
+          go.addEventListener("click", () => { document.getElementById("query").textContent = input.value; });
+          root.append(label, go);
+        }
+      });
+    </script>
+  </body>
+</html>
