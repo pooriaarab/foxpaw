@@ -22,6 +22,15 @@ the code that makes them pass.
 | P9 | An autocomplete list never opens after typing. The run waits forever. | `settle` returns at its cap (1.5 s). The controller keeps the typed text and moves on (C6). | E2E `settle returns when no list opens` |
 | P10 | The page never goes quiet (a ticker). | `settle` returns at its cap. | E2E `settle returns on a page that never stops` |
 
+## Goal parsing
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| G1 | A comma inside a date ("December 3, 2026") splits the date into two requirements. | Dates and quoted values are kept whole when the goal is split. | Isolated `tests/goal.test.ts` |
+| G2 | A list of `key: value` items reads as one requirement. | Each item becomes its own requirement with a key and a value. | Isolated `tests/goal.test.ts` |
+| G3 | "from New York to Boston on May 2" reads as one requirement. | Each preposition starts a new requirement. "Set X to Y" is not split. | Isolated `tests/goal.test.ts` |
+| G4 | "Do not submit" reads as a requirement to press Submit. | It turns sending off and is not a requirement. | Isolated `tests/goal.test.ts` |
+
 ## Controller rules
 
 | # | Failure mode | Wanted behaviour | Test |
