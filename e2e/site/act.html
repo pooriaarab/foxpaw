@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Account settings</title>
+    <style>#cover { position: absolute; left: 0; top: 0; width: 240px; height: 40px; background: rgba(0, 0, 0, 0.2); }</style>
+  </head>
+  <body>
+    <h1>Account settings</h1>
+    <label>Display name <input id="name" /></label>
+    <p>Name in page state: <output id="mirror"></output></p>
+    <p><button id="first" type="button">Save changes</button> <button id="second" type="button">Delete account</button></p>
+    <p>Last click: <output id="last">none</output></p>
+    <div style="position: relative; height: 50px"><button id="under" type="button">Covered button</button><div id="cover"></div></div>
+    <form><label>Promo code <input name="promo" /></label> <button type="submit" disabled>Apply</button></form>
+    <label>City <input id="city" role="combobox" aria-autocomplete="list" aria-controls="city-list" /></label>
+    <ul id="city-list" role="listbox" hidden></ul>
+    <p>Price now: <output id="ticker">0</output></p>
+    <script>
+      // A React-style controlled input (P2): the page keeps its own state and
+      // writes it back on every render, so a value set without an input event is lost.
+      const name = document.getElementById("name");
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+      let state = "";
+      const render = () => { setter.set.call(name, state); document.getElementById("mirror").textContent = state; };
+      name.addEventListener("input", () => { state = setter.get.call(name); render(); });
+      name.addEventListener("blur", render);
+      for (const id of ["first", "second", "under"]) {
+        document.getElementById(id).addEventListener("click", (e) => { document.getElementById("last").textContent = e.target.textContent; });
+      }
+      // The test calls swap() between the snapshot and the action (P5).
+      window.swap = () => {
+        const [a, b] = [document.getElementById("first"), document.getElementById("second")];
+        [a.textContent, b.textContent] = [b.textContent, a.textContent];
+      };
+      // A ticker that never stops (P10), started by the test.
+      window.tick = () => setInterval(() => { const t = document.getElementById("ticker"); t.textContent = String(Number(t.textContent) + 1); }, 40);
+    </script>
+  </body>
+</html>

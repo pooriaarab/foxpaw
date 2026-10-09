@@ -76,3 +76,27 @@ export interface Snapshot {
   /** The page can scroll down. */
   more: boolean;
 }
+/** What `act` can do to a control. */
+export type Operation = "click" | "type" | "select" | "check" | "uncheck" | "date" | "enter" | "scroll";
+
+export interface ActRequest {
+  op: Operation;
+  /** The text to type, the option value to select, the ISO date, or the scroll delta. */
+  value?: string;
+  /** Outline the control before acting. Default: true. */
+  mark?: boolean;
+}
+
+/** Why `act` did not act. */
+export type Refusal = "stale" | "gone" | "hidden" | "covered" | "disabled" | "readonly" | "unsupported" | "navigated";
+
+export interface ActResult {
+  ok: boolean;
+  reason?: Refusal;
+  /** More detail on a refusal. */
+  detail?: string;
+  /** The field's value after typing. */
+  value?: string;
+  /** The action fired a submit event on a form. */
+  submitted?: boolean;
+}
