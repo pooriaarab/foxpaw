@@ -19,6 +19,7 @@ try {
     return window.foxpaw[f](tabId, ...a);
   }, `${site.url}/${path}`, fn, rest);
   const open = (path) => fox.open(`${site.url}/${path}`);
+  const tabPage = async (path) => (await fox.browser.pages()).find((p) => p.url().startsWith(`${site.url}/${path}`));
 
   // Read
   await open("read.html");
@@ -30,6 +31,41 @@ try {
   check("select options are read", ["Free", "Team"], by("Plan")?.options?.map((o) => o.label));
   check("checkbox state is read", false, by("I accept the terms")?.checked);
   check("disabled submit is marked", { submit: true, disabled: true }, { submit: by("Create account")?.submit, disabled: by("Create account")?.disabled });
+
+  // Act
+  const page = await open("act.html");
+  const act = async (label, request, before) => {
+    const snap = await call("act.html", "snapshot");
+    const target = snap.controls.find((c) => c.label === label);
+    if (before) await page.evaluate(before);
+    return call("act.html", "act", target, request, snap);
+  };
+  const text = (id) => page.evaluate((i) => document.getElementById(i).textContent, id);
+  await act("Display name", { op: "type", value: "Sam Lee" });
+  await act("Save changes", { op: "click" });
+  check("react state holds the typed value", "Sam Lee", await text("mirror"));
+  const stale = await act("Delete account", { op: "click" }, "window.swap()");
+  check("stale check refuses a changed page", { reason: "stale", last: "Save changes" }, { reason: stale.reason, last: await text("last") });
+  check("covered control is refused", "covered", (await act("Covered button", { op: "click" })).reason);
+  check("disabled submit is refused", "disabled", (await act("Apply", { op: "click" })).reason);
+  await act("City", { op: "type", value: "Paris" });
+  const city = (await call("act.html", "snapshot")).controls.find((c) => c.label === "City");
+  const listWait = await call("act.html", "settle", { listFor: city.node, frameId: city.frameId });
+  check("settle returns when no list opens", true, listWait >= 500 && listWait < 1600);
+  await page.evaluate("window.tick()");
+  const busyWait = await call("act.html", "settle", {});
+  check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
+
+  await open("frames.html");
+  const embedded = await call("frames.html", "snapshot");
+  const search = embedded.controls.find((c) => c.label === "Search the docs");
+  await call("frames.html", "act", search, { op: "type", value: "tab groups" }, embedded);
+  const go = (await call("frames.html", "snapshot")).controls.find((c) => c.label === "Search");
+  await call("frames.html", "act", go, { op: "click" }, await call("frames.html", "snapshot"));
+  check("shadow DOM field is read and filled", "tab groups", await (await tabPage("frames.html")).evaluate(() => document.getElementById("query").textContent));
+  const news = embedded.controls.find((c) => c.label === "Newsletter email");
+  const typed = await call("frames.html", "act", news, { op: "type", value: "sam@example.com" }, await call("frames.html", "snapshot"));
+  check("iframe form is read and filled", { frame: true, value: "sam@example.com" }, { frame: news.frameId !== 0, value: typed.value });
 } catch (error) {
   record.error = error instanceof Error ? error.stack ?? error.message : String(error);
 } finally {
