@@ -16,7 +16,6 @@
   },
   "permissions": [
     "scripting",
-    "tabs",
     "tabGroups"
   ],
   "host_permissions": [

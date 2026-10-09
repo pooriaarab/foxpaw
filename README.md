@@ -17,7 +17,8 @@ npm i foxpaw
 
 This code runs as written in a Firefox extension page or background script
 that you bundle, for example with esbuild. The extension needs the `scripting`
-and `tabs` permissions and host access to the page:
+permission and host access to the page. With `group: true` it also needs
+`tabGroups`:
 
 ```js
 import { runTask, ruleChooser } from "foxpaw";
