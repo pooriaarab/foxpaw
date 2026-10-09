@@ -87,6 +87,8 @@ try {
   const captcha = await run("captcha.html", "email: sam@example.com");
   check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
   const newsRun = await run("frames.html", "Newsletter email: sam@example.com");
+  const shown = await ext.evaluate(() => ({ steps: document.querySelectorAll("#steps li").length, checks: document.querySelectorAll("#checks li.ok").length, status: document.getElementById("status").textContent }));
+  check("sidebar shows the steps and the checklist", { steps: 2, checks: 2, status: true }, { ...shown, status: shown.status.startsWith("Done and verified") });
   check("iframe form run is verified", { status: "done", verified: true, sent: true }, { status: newsRun.status, verified: newsRun.verified, sent: newsRun.steps.some((s) => s.submitted) });
 } catch (error) {
   record.error = error instanceof Error ? error.stack ?? error.message : String(error);
