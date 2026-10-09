@@ -34,4 +34,9 @@ describe("sameSite", () => {
     expect(sameSite("https://shop.example.com/", "https://pay.stripe.com/", ["stripe.com"])).toBe(true);
     expect(sameSite("https://shop.example.com/", "https://evilstripe.com/", ["stripe.com"])).toBe(false);
   });
+
+  it("keeps a page with no host on pages of its own scheme", () => {
+    expect(sameSite("file:///a.html", "file:///b.html")).toBe(true);
+    expect(sameSite("file:///a.html", "https://example.com/")).toBe(false);
+  });
 });
