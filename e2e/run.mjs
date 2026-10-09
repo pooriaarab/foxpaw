@@ -44,8 +44,8 @@ try {
   await act("Display name", { op: "type", value: "Sam Lee" });
   await act("Save changes", { op: "click" });
   check("react state holds the typed value", "Sam Lee", await text("mirror"));
-  const stale = await act("Delete account", { op: "click" }, "window.swap()");
-  check("stale check refuses a changed page", { reason: "stale", last: "Save changes" }, { reason: stale.reason, last: await text("last") });
+  const stale = await act("Delete account", { op: "click" }, "window.swap(); document.getElementById('last').textContent = 'none'");
+  check("stale check refuses a changed page", { reason: "stale", last: "none" }, { reason: stale.reason, last: await text("last") });
   check("covered control is refused", "covered", (await act("Covered button", { op: "click" })).reason);
   check("disabled submit is refused", "disabled", (await act("Apply", { op: "click" })).reason);
   await act("City", { op: "type", value: "Paris" });
