@@ -79,9 +79,9 @@ try {
 
   // Run: snapshot -> choose -> stale check -> act -> settle -> verify, with ruleChooser.
   const runs = (record.runs = {});
-  const run = async (path, goal) => {
+  const run = async (path, goal, options) => {
     await open(path);
-    const result = await call(path, "run", goal);
+    const result = await call(path, "run", goal, options);
     runs[path] = result;
     return result;
   };
@@ -97,6 +97,14 @@ try {
   const nowhere = await run("search.html", "search: tab groups");
   check("a send with no effect is not verified", { status: "blocked", reason: "the form did not send", verified: false },
     { status: nowhere.status, reason: nowhere.blockedReason, verified: nowhere.verified });
+  const away = await run("away.html", "email: sam@example.com, name: Sam Lee");
+  check("run stops on another site", { status: "blocked", reason: "the page moved to another site", host: "localhost", acted: ["Email", "Join"] },
+    { status: away.status, reason: away.blockedReason, host: new URL(away.url).hostname, acted: away.steps.map((s) => s.action) });
+  const linked = await run("away.html", "open partner profile, name: Sam Lee");
+  check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
+    { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });
+  const allowed = await run("away.html", "open partner profile, name: Sam Lee", { allowHosts: ["localhost"] });
+  check("allowHosts lets the run go on", { status: "done", acted: ["Partner profile", "Name", "Save"] }, { status: allowed.status, acted: allowed.steps.map((s) => s.action) });
   const captcha = await run("captcha.html", "email: sam@example.com");
   check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
   const newsRun = await run("frames.html", "Newsletter email: sam@example.com");

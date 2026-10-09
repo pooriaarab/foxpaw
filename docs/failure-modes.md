@@ -22,6 +22,7 @@ the code that makes them pass.
 | P9 | An autocomplete list never opens after typing. The run waits forever. | `settle` returns at its cap (1.5 s). The controller keeps the typed text and moves on (C6). | E2E `settle returns when no list opens` |
 | P10 | The page never goes quiet (a ticker). | `settle` returns at its cap. | E2E `settle returns on a page that never stops` |
 | P11 | A list without keys reuses its DOM nodes. A row is removed, and the next row's text moves into the same nodes. The "Archive" button keeps its node and its label, but now belongs to another row. | The guard holds the control's section and a short hash of its row, list item or card text. When the row text changed, `act` returns `stale`. | E2E `stale check sees a reused row` |
+| P12 | A click on a link starts a navigation, and the next `executeScript` call goes to the document that is unloading. Firefox never answers it, so the run hangs. | Each `snapshot`, `act` and `settle` call gives up after a time limit (5 s, 5 s, 3 s). `runTask` reads the new page again. | E2E `run does not act after a link to another site`, `allowHosts lets the run go on` |
 
 ## Goal parsing
 
@@ -48,6 +49,7 @@ the code that makes them pass.
 | C10 | The goal says "do not submit". The run submits anyway. | The controller never sends a form when the goal forbids it. | Isolated `tests/controller.test.ts` |
 | C11 | The run never ends, or ends early. | It ends `done` when nothing is left. It ends `blocked` at the step cap, or after 3 stale refusals in a row. | Isolated `tests/controller.test.ts` |
 | C12 | The page shows a captcha. The run tries to solve it. | The run stops with `blocked: "captcha"` before any action. | Isolated `tests/controller.test.ts`, E2E `captcha page is blocked` |
+| C18 | A send or a link click navigates to another site that has its own form. The run keeps acting there, on a site no caller or gate judged. | `runTask` pins the registrable domain of the page it starts on. When a later page is on another site, it stops with `blocked: "the page moved to another site"` before it acts. A move within the same site goes on. `allowHosts` names more sites for a caller that judged them. | E2E `run stops on another site`, `run does not act after a link to another site`, `allowHosts lets the run go on`; isolated `tests/site.test.ts` |
 | C13 | A control deletes, buys or pays. The run clicks it because it scored well. | The controller never picks such a control unless the goal names it. | Isolated `tests/controller.test.ts` |
 | C14 | A risky label uses another word form: "Place your order", "Confirm payment", "Check out", "Payment". | Risky labels match by word stem and phrase, not one fixed word. | Isolated `tests/safety.test.ts` |
 | C15 | The goal holds the risky word only inside an email or a URL ("me@paypal.com"), or after a negation ("do not buy anything"). | Only a whole word in the goal's own text allows the action. Emails, URLs and quoted text do not count. A "not", "never", "no" or "without" earlier in the same clause blocks it. | Isolated `tests/safety.test.ts` |

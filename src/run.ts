@@ -5,6 +5,7 @@ import type { Chooser } from "./choosers/chooser.js";
 import { ruleChooser } from "./choosers/rule.js";
 import { confirmSend, decide, record, start, type StepRecord } from "./controller.js";
 import { groupTab } from "./tabgroup.js";
+import { sameSite } from "./site.js";
 import { act, api, settle, snapshot, type ScriptingApi } from "./tab.js";
 import type { Snapshot } from "./types.js";
 import { verify, type Check } from "./verify.js";
@@ -22,6 +23,11 @@ export interface RunOptions {
   onStep?: (step: StepRecord) => void;
   /** Stops the run before the next action. */
   signal?: AbortSignal;
+  /**
+   * More hosts the run may act on, with their subdomains. By default the run
+   * stays on the site (registrable domain) it starts on.
+   */
+  allowHosts?: string[];
   /** The WebExtension `browser` object. Default: the global one. */
   browser?: ScriptingApi & { tabs?: { get(tabId: number): Promise<{ status?: string }> } };
 }
@@ -75,9 +81,16 @@ export async function runTask(tabId: number, goal: string, options: RunOptions =
   let sentFrom: Snapshot | undefined;
   try {
     page = await readTab(tabId, browser);
+    const home = page.url;
     for (;;) {
       if (options.signal?.aborted) {
         result.status = "stopped";
+        break;
+      }
+      // One goal acts on one site. A send or a link that leaves it ends the run.
+      if (!sameSite(home, page.url, options.allowHosts)) {
+        result.status = "blocked";
+        result.blockedReason = "the page moved to another site";
         break;
       }
       const next = await decide(state, page, chooser);
