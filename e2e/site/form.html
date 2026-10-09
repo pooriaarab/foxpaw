@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Book a trip</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 24px; max-width: 640px; }
+      label { display: block; margin-top: 12px; }
+      .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      [role="listbox"] { border: 1px solid #999; margin: 0; padding: 0; list-style: none; }
+      [role="option"] { padding: 4px 8px; cursor: pointer; }
+      [role="dialog"] { border: 1px solid #999; padding: 8px; background: #fff; width: 300px; }
+      [role="grid"] button { width: 36px; }
+      #state { color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>Book a trip</h1>
+    <form id="trip" action="thanks.html" method="get">
+      <label>Name <input id="name" name="name" /></label>
+      <p id="state">Name in page state: <output id="mirror"></output></p>
+      <!-- Hidden duplicates of the email field (P1). Only the visible one may get a value. -->
+      <input name="email" id="email-hidden" style="display:none" aria-label="Email" />
+      <input name="email-copy" id="email-clipped" class="sr-only" aria-label="Email" />
+      <label>Email <input id="email" name="email" type="email" /></label>
+      <label>From
+        <input id="from" name="from" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="from-list" autocomplete="off" />
+      </label>
+      <ul id="from-list" role="listbox" hidden></ul>
+      <label>Depart <input id="depart" name="depart" readonly aria-haspopup="dialog" placeholder="Pick a date" /></label>
+      <div id="calendar" role="dialog" aria-label="Choose a departure date" hidden>
+        <button type="button" id="prev">Previous month</button>
+        <strong id="month"></strong>
+        <button type="button" id="next">Next month</button>
+        <div role="grid" id="days"></div>
+      </div>
+      <label>Cabin
+        <select id="cabin" name="cabin">
+          <option>Economy</option>
+          <option>Premium economy</option>
+          <option>Business</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="terms" name="terms" /> I accept the terms</label>
+      <p><button id="book" type="submit" disabled>Book</button></p>
+    </form>
+    <script>
+      // A React-style controlled input (P2): the page keeps its own state and
+      // writes it back on every render, so a value set without an input event is lost.
+      const name = document.getElementById("name");
+      const mirror = document.getElementById("mirror");
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+      let state = "";
+      const render = () => { setter.set.call(name, state); mirror.textContent = state; };
+      name.addEventListener("input", () => { state = setter.get.call(name); render(); });
+      name.addEventListener("blur", render);
+
+      // An autocomplete list that opens after typing.
+      const cities = ["San Diego, CA", "San Francisco, CA", "San Jose, CA", "Santa Fe, NM", "Boston, MA"];
+      const from = document.getElementById("from");
+      const list = document.getElementById("from-list");
+      from.addEventListener("input", () => {
+        list.replaceChildren();
+        const q = from.value.trim().toLowerCase();
+        const found = q ? cities.filter((c) => c.toLowerCase().startsWith(q.slice(0, 3))) : [];
+        setTimeout(() => {
+          for (const c of found) {
+            const li = document.createElement("li");
+            li.setAttribute("role", "option");
+            li.textContent = c;
+            li.addEventListener("click", () => { from.value = c; list.hidden = true; from.setAttribute("aria-expanded", "false"); });
+            list.append(li);
+          }
+          list.hidden = found.length === 0;
+          from.setAttribute("aria-expanded", String(found.length > 0));
+        }, 120);
+      });
+
+      // A date picker that opens on October 2026.
+      const depart = document.getElementById("depart");
+      const calendar = document.getElementById("calendar");
+      let shown = new Date(2026, 9, 1);
+      const drawMonth = () => {
+        document.getElementById("month").textContent = shown.toLocaleString("en-US", { month: "long", year: "numeric" });
+        const days = document.getElementById("days");
+        days.replaceChildren();
+        for (let d = 1; d <= new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate(); d++) {
+          const day = new Date(shown.getFullYear(), shown.getMonth(), d);
+          const b = document.createElement("button");
+          b.type = "button";
+          b.setAttribute("role", "gridcell");
+          b.setAttribute("aria-label", day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }));
+          b.textContent = String(d);
+          b.addEventListener("click", () => {
+            depart.value = day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+            calendar.hidden = true;
+          });
+          days.append(b);
+        }
+      };
+      depart.addEventListener("click", () => { calendar.hidden = false; drawMonth(); });
+      document.getElementById("next").addEventListener("click", () => { shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1); drawMonth(); });
+      document.getElementById("prev").addEventListener("click", () => { shown = new Date(shown.getFullYear(), shown.getMonth() - 1, 1); drawMonth(); });
+
+      // The submit button stays disabled until the terms are accepted.
+      document.getElementById("terms").addEventListener("change", (e) => { document.getElementById("book").disabled = !e.target.checked; });
+    </script>
+  </body>
+</html>
