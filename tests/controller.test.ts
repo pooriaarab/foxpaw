@@ -150,4 +150,23 @@ describe("controller", () => {
     const named = await start("delete account", chooser, TODAY);
     expect(target(await step(named, page([remove, details])))).toBe("Delete account");
   });
+
+  it("does not press an order or payment button for an unrelated goal (C14)", async () => {
+    for (const label of ["Place your order", "Confirm payment", "Check out"]) {
+      const email = c("Email", { type: "email" });
+      const risky = c(label, { role: "button", submit: true });
+      const state = await start("email: a@b.co", chooser, TODAY);
+      await step(state, page([email, risky]));
+      expect(target(await step(state, page([{ ...email, value: "a@b.co" }, risky])))).toBe(`blocked: sending presses "${label}", which the goal does not ask for`);
+      expect(state.history.map((h) => h.action)).toEqual(["Email"]);
+    }
+  });
+
+  it("stops before a risky submit button the goal does not name (C16)", async () => {
+    const email = c("Email", { type: "email" });
+    const pay = c("Pay now", { role: "button", submit: true });
+    const state = await start("email: me@paypal.com", chooser, TODAY);
+    await step(state, page([email, pay]));
+    expect(target(await step(state, page([email, pay])))).toBe('blocked: sending presses "Pay now", which the goal does not ask for');
+  });
 });
