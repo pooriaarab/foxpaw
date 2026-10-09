@@ -8,3 +8,5 @@ export { ruleChooser } from "./choosers/rule.js";
 export { decide, record, start, FLOOR, type Next, type RunState, type StepRecord } from "./controller.js";
 export { namesValue, nearlyNames } from "./match.js";
 export { problemOf, verify, type Check, type Verdict } from "./verify.js";
+export { runTask, type RunOptions, type RunResult } from "./run.js";
+export { groupTab, type TabGroupStatus } from "./tabgroup.js";
