@@ -133,9 +133,18 @@ export function readFrame(): FrameRead | null {
   const fields = () => deep(document, "input,textarea,select").filter((e) => !["hidden", "file"].includes(f(e).type) && visible(e));
   cache.key = () => JSON.stringify([performance.timeOrigin, location.href,
     fields().map((e) => [identity(e), shown(e), f(e).checked, f(e).selectedIndex, disabled(e)])]);
+  // The row, list item or card around a control. A keyless list reuses its
+  // nodes, so the same "Archive" button can move to another row's text.
+  const context = (e: Element): string => {
+    const row = e.closest('li,tr,dd,article,[role="row"],[role="listitem"],[role="option"],[role="article"]');
+    const text = (row?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 2000);
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+    return `${section(e)}|${(hash >>> 0).toString(36)}`;
+  };
   cache.guard = (e: Element) => e.isConnected && visible(e)
     ? JSON.stringify([role(e), name(e), shown(e), state(e) ?? null, f(e).selectedIndex ?? null, disabled(e),
-      e.getAttribute("aria-expanded"), e.getAttribute("href")])
+      e.getAttribute("aria-expanded"), e.getAttribute("href"), context(e)])
     : null;
 
   // Autocomplete lists, found through the page's own ARIA links.

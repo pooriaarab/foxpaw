@@ -21,6 +21,7 @@ the code that makes them pass.
 | P8 | The control is disabled. A click does nothing, and the run thinks it worked. | `snapshot` marks it `disabled`. `act` returns `disabled` and does not click. | E2E `disabled submit is refused` |
 | P9 | An autocomplete list never opens after typing. The run waits forever. | `settle` returns at its cap (1.5 s). The controller keeps the typed text and moves on (C6). | E2E `settle returns when no list opens` |
 | P10 | The page never goes quiet (a ticker). | `settle` returns at its cap. | E2E `settle returns on a page that never stops` |
+| P11 | A list without keys reuses its DOM nodes. A row is removed, and the next row's text moves into the same nodes. The "Archive" button keeps its node and its label, but now belongs to another row. | The guard holds the control's section and a short hash of its row, list item or card text. When the row text changed, `act` returns `stale`. | E2E `stale check sees a reused row` |
 
 ## Goal parsing
 
