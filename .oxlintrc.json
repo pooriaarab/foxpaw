@@ -4,5 +4,14 @@
     "correctness": "error",
     "suspicious": "warn"
   },
+  "rules": {
+    "no-underscore-dangle": ["warn", { "allow": ["__foxpaw"] }]
+  },
+  "overrides": [
+    {
+      "files": ["src/page/*.ts"],
+      "rules": { "unicorn/consistent-function-scoping": "off" }
+    }
+  ],
   "ignorePatterns": ["dist", "dist-ext", "artifacts"]
 }

@@ -19,6 +19,7 @@ await build({
   bundle: true,
   format: "iife",
   target: "firefox153",
+  resolveExtensions: [".ts", ".js"],
   logLevel: "warning",
 });
 for (const file of files.filter((f) => !f.endsWith(".js"))) cpSync(`extension/${file}`, `dist-ext/${file}`, { recursive: true });
