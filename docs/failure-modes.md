@@ -79,3 +79,27 @@ the code that makes them pass.
 | V8 | A normal page has the word "error" in a form hint. It reads as an error page. | Only the title, a top heading or a near-empty page can mark an error page. | Isolated `tests/verify.test.ts` |
 | V9 | The run presses Enter or clicks a button that is not a real submit. No submit event fires and the page does not change. The run still reports "Form sent". | A send counts only when a submit event fired, or the top frame's address or document changed after it. Else the run stops with `blocked: "the form did not send"`, and "Form sent" fails. | Isolated `tests/controller.test.ts`, `tests/verify.test.ts` |
 | V10 | The run clicks a toggle for a setting, but the toggle was already on, so the click turned it off. The check passes because the click happened. | A setting check reads the control's state after the run. A control that reports a state must be on. | Isolated `tests/verify.test.ts` |
+
+## AMO release build and listed submission (`scripts/amo-listing.mjs`)
+
+`pnpm check:amo` reads `dist-ext/`, which is what `release.yml` signs. Each
+row is a way that the listed build or the submission can go wrong.
+
+| ID | Failure | Wanted result |
+|---|---|---|
+| AR1 | `dist-ext/` is missing, so the check reads nothing | The check stops and says to run `pnpm build:ext` |
+| AR2 | A content script in the release manifest matches `127.0.0.1`, `localhost` or `*.localhost` (a test bridge) | The check stops and names the pattern |
+| AR3 | A host permission for a local host exists only for tests | The check stops, unless `local_hosts` in the listing gives a reason for that exact pattern |
+| AR4 | A file named for tests (`e2e`, `fixture`, `test`, `spec`) is in `dist-ext/` | The check stops and names the file |
+| AR5 | `dist-ext/` came from `build-ext.mjs --e2e` | AR2 or AR4 stops it |
+| AR6 | The `local_hosts` reasons go to AMO as an unknown field | `metadata` leaves them out, as it does the privacy policy |
+| AR7 | A re-run submits a version that AMO already has as listed | `version-status` says `listed`, and the step skips web-ext sign and finishes the release |
+| AR8 | AMO has the version as unlisted | `version-status` stops and says to bump the version |
+| AR9 | The AMO version lookup fails (401, 500, network) | `version-status` stops; it never guesses `absent` |
+| AR10 | The release sidebar sets `window.foxpaw`, a hook that only the e2e test uses | `build-ext.mjs --e2e` defines `__E2E__` true and keeps the hook; the release build defines it false, so esbuild drops the hook |
+| AR11 | `pnpm e2e` runs on the release build, which has no hook, so it cannot drive the sidebar | The `e2e` script builds with `--e2e` |
+
+| ID | Failure | Wanted result |
+|---|---|---|
+| AR-U1 | A `local_hosts` reason for a host permission also clears a test content script on the same pattern | Each reason names its use (`host_permission`, `content_script`, `web_accessible_resource`, `externally_connectable`); a use without its own reason stops the check |
+| AR-U2 | `local_hosts` keeps a reason for a use that the release build does not have | The check stops and names the pattern and the use |
