@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "foxpaw demo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read a web page, act on it like a person, and check the result, from a Firefox extension.",
   "browser_specific_settings": {
     "gecko": {
