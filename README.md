@@ -40,7 +40,10 @@ ok accept the terms - I accept the terms
 ok Form sent - the run sent the form it filled
 ```
 
-To try it without writing code, build the demo extension and load it:
+Install from AMO: [addons.mozilla.org/firefox/addon/foxpaw](https://addons.mozilla.org/firefox/addon/foxpaw/)
+(pending AMO review; the link works after approval).
+
+To try it without writing code, build the extension and load it:
 
 ```bash
 pnpm install

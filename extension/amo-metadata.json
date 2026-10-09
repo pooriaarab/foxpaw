@@ -1,0 +1,18 @@
+{
+  "default_locale": "en-US",
+  "slug": "foxpaw",
+  "name": { "en-US": "foxpaw — act on a page and check the result" },
+  "summary": {
+    "en-US": "Type a goal such as \"Name: Sam Lee, email: sam@example.com, accept the terms\". foxpaw reads the controls on the current tab, fills and clicks them like a person, and shows each step and a checklist of the result. No AI model and no download."
+  },
+  "description": {
+    "en-US": "foxpaw is the \"hand\" of a browser agent, as an open-source library and this sidebar. The add-on runs it on the current tab.\n\n**Who it is for:** people who build browser agents or form automation and want to see how a page reads to an agent, and people who fill the same kind of form often.\n\n**How to use it**\n\n1. Click the foxpaw toolbar button. The sidebar opens.\n2. Type a goal for the current tab, for example \"Name: Sam Lee, email: sam@example.com, accept the terms\". Add \"do not submit\" to stop before the form is sent.\n3. Click Run. foxpaw reads every control on the page, fills fields, selects options and ticks boxes through in-page events, then checks the result. The sidebar shows each step and a checklist. The tab goes into a \"foxpaw\" tab group while it works.\n\nfoxpaw decides with rules (word overlap, synonyms and field type). This add-on bundles no AI model, so its GLiNER2 option is off. It refuses to act when the page changed after a decision, and it stays on the site where the goal started.\n\n**What leaves your computer**\n\nfoxpaw sends nothing to its authors and has no server. Unless your goal says \"do not submit\", it can press the form's send button. Then the page sends the form to that website, as if you had clicked the button.\n\n**Permissions**\n\n- Access to all websites and scripting: read the controls on the tab you give a goal to, and act on them.\n- Tab groups: put the tab in a \"foxpaw\" group while a goal runs.\n\nThe source code is MIT licensed."
+  },
+  "categories": { "firefox": ["web-development"] },
+  "homepage": { "en-US": "https://github.com/pooriaarab/foxpaw" },
+  "support_url": { "en-US": "https://github.com/pooriaarab/foxpaw/issues" },
+  "version": {
+    "license": "MIT",
+    "approval_notes": "The uploaded source.zip is the git tree of this release. To build: install Node 24 and pnpm 11 (corepack enable), run `pnpm install --frozen-lockfile`, then `pnpm build:ext`. The output is dist-ext/. esbuild bundles extension/*.js with src/*.ts; the other files are copied unmodified. Page functions run through scripting.executeScript with bundled functions and JSON arguments; no remote or generated code. To try it: open any page with a sign-up form, click the toolbar button, type \"Name: Sam Lee, email: sam@example.com, accept the terms, do not submit\" and click Run. No account is needed."
+  }
+}
