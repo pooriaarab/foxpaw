@@ -81,13 +81,13 @@ try {
   check("form run sent every value", ["Sam Lee", "sam@example.com", "San Francisco, CA", "Thu, Dec 3, 2026", "Business", "on"],
     [sent.get("name"), sent.getAll("email").join(""), sent.get("from"), sent.get("depart"), sent.get("cabin"), sent.get("terms")]);
   check("hidden duplicates stay empty", ["", ""], [sent.getAll("email")[0], sent.get("email-copy")]);
-  check("driven tab is in a foxpaw tab group", true, /^foxpaw · /.test(booked.group ?? ""));
+  check("driven tab is in a foxpaw tab group", true, (booked.group ?? "").startsWith("foxpaw · "));
   const failed = await run("signup.html", "email: sam@example.com");
   check("error page is not verified", { status: "done", verified: false, problem: "error page" }, { status: failed.status, verified: failed.verified, problem: failed.problem });
   const captcha = await run("captcha.html", "email: sam@example.com");
   check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
-  const news = await run("frames.html", "Newsletter email: sam@example.com");
-  check("iframe form run is verified", { status: "done", verified: true }, { status: news.status, verified: news.verified });
+  const newsRun = await run("frames.html", "Newsletter email: sam@example.com");
+  check("iframe form run is verified", { status: "done", verified: true, sent: true }, { status: newsRun.status, verified: newsRun.verified, sent: newsRun.steps.some((s) => s.submitted) });
 } catch (error) {
   record.error = error instanceof Error ? error.stack ?? error.message : String(error);
 } finally {

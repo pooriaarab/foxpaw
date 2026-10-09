@@ -2,10 +2,10 @@
 // functions through window.foxpaw.
 import { act, runTask, settle, snapshot } from "../src/index.ts";
 
-/** The id of the first tab whose address starts with `prefix`. */
+/** The id of the newest tab whose address starts with `prefix`. */
 async function tabFor(prefix) {
   const tabs = await browser.tabs.query({});
-  const tab = tabs.find((t) => t.url?.startsWith(prefix));
+  const tab = tabs.findLast((t) => t.url?.startsWith(prefix));
   if (!tab) throw new Error(`No tab at ${prefix}`);
   return tab.id;
 }
