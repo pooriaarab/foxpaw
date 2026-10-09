@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign up</title>
+    <style>.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }</style>
+  </head>
+  <body>
+    <h1>Sign up</h1>
+    <form action="thanks.html">
+      <!-- Hidden duplicates of the email field (P1). snapshot must not read them. -->
+      <input name="email" style="display:none" aria-label="Email" />
+      <input name="email-copy" class="sr-only" aria-label="Email" />
+      <input name="trap" style="position:absolute;left:-9999px" aria-label="Email" />
+      <label>Email <input name="email" type="email" /></label>
+      <label>Plan
+        <select name="plan"><option>Free</option><option selected>Team</option></select>
+      </label>
+      <label><input type="checkbox" name="terms" /> I accept the terms</label>
+      <button type="submit" disabled>Create account</button>
+    </form>
+  </body>
+</html>
