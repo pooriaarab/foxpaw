@@ -49,6 +49,15 @@ the code that makes them pass.
 | C12 | The page shows a captcha. The run tries to solve it. | The run stops with `blocked: "captcha"` before any action. | Isolated `tests/controller.test.ts`, E2E `captcha page is blocked` |
 | C13 | A control deletes, buys or pays. The run clicks it because it scored well. | The controller never picks such a control unless the goal names it. | Isolated `tests/controller.test.ts` |
 
+## glinerChooser: a foxmind model behind the Chooser
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| M1 | Two controls share a label. The model's score maps to the wrong one. | Each label sent to the model is unique ("Email", "Email (2)"). The score maps back to the right control. | Isolated `tests/gliner.test.ts` |
+| M2 | A page has hundreds of controls. One model call becomes slow. | At most 32 controls go into one call, in page order. | Isolated `tests/gliner.test.ts` |
+| M3 | The object passed in has no `classify`. The run fails mid-task. | `glinerChooser` throws a `TypeError` that names the missing method when it is created. | Isolated `tests/gliner.test.ts` |
+| M4 | The model scores every control low. | `choose` returns the top score as it is. The controller's floor decides. | Isolated `tests/gliner.test.ts` |
+
 ## Verify: the result checklist
 
 | # | Failure mode | Wanted behaviour | Test |
