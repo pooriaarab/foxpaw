@@ -62,14 +62,21 @@ transcripts. Full rule: pooriaarab/agents-private `rules/fleet-claim.md`.
 ## Layout
 
 ```text
-src/              the library source, built to dist/ by tsc
-tests/            tests for the failure modes in docs/failure-modes.md
+src/page/         functions that run in the page (snapshot, act, settle); self-contained
+src/tab.ts        the extension side: executeScript calls for snapshot, act and settle
+src/goal.ts       splits a goal into requirements
+src/controller.ts the deterministic rules: order, one-to-one, lists, pickers, send, end
+src/choosers/     the Chooser interface, ruleChooser and glinerChooser
+src/verify.ts     the result checklist
+src/run.ts        runTask: the whole loop
+tests/            isolated tests for the failure modes in docs/failure-modes.md
 docs/failure-modes.md  every way the code can fail, written before the code
-.github/          CI, release, PR and issue standards
-extension/        the demo extension that shows this repo working in Firefox
-scripts/build-ext.mjs  bundles extension/ into dist-ext/ with esbuild
-e2e/run.mjs       the Firefox E2E test; writes artifacts/e2e-<date>.json
+extension/        the demo extension (sidebar); bundled into dist-ext/ by scripts/build-ext.mjs
+e2e/run.mjs       the Firefox E2E test on e2e/site/; writes artifacts/e2e-<date>.json
 ```
+
+Functions in `src/page/` are sent to the page with `Function.prototype.toString`.
+They must not use anything from module scope.
 
 ## Commands
 
