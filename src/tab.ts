@@ -26,11 +26,21 @@ export function api(): ScriptingApi {
   return found;
 }
 
+/**
+ * An executeScript call into a document that is unloading can stay
+ * unanswered. Each call gives up after `ms`, so a run never hangs.
+ */
+function limit<T>(call: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`the page did not answer in ${ms} ms`)), ms); });
+  return Promise.race([call, late]).finally(() => clearTimeout(timer));
+}
+
 /** Reads every frame of the tab and joins them into one Snapshot. */
 export async function snapshot(tabId: number, browser: ScriptingApi = api()): Promise<Snapshot> {
-  const results = await browser.scripting.executeScript({
+  const results = await limit(browser.scripting.executeScript({
     target: { tabId, allFrames: true }, func: readFrame, world: "ISOLATED", injectImmediately: true,
-  });
+  }), 5000);
   const reads = results.filter((r): r is typeof r & { result: FrameRead } => !r.error && !!r.result)
     .toSorted((a, b) => a.frameId - b.frameId);
   const top = reads.find((r) => r.frameId === 0)?.result;
@@ -62,9 +72,9 @@ export async function act(tabId: number, control: Control, request: ActRequest, 
   const target = frame.documentId ? { tabId, documentIds: [frame.documentId] } : { tabId, frameIds: [control.frameId] };
   let results: Awaited<ReturnType<ScriptingApi["scripting"]["executeScript"]>>;
   try {
-    results = await browser.scripting.executeScript({
+    results = await limit(browser.scripting.executeScript({
       target, func: perform, args: [control.node, request, { guard: control.guard, key: frame.key }], world: "ISOLATED", injectImmediately: true,
-    });
+    }), 5000);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/permission/i.test(message)) throw error;
@@ -84,9 +94,9 @@ export async function act(tabId: number, control: Control, request: ActRequest, 
 export async function settle(tabId: number, options: { frameId?: number; listFor?: number } = {}, browser: ScriptingApi = api()): Promise<number> {
   const started = Date.now();
   try {
-    const [first] = await browser.scripting.executeScript({
+    const [first] = await limit(browser.scripting.executeScript({
       target: { tabId, frameIds: [options.frameId ?? 0] }, func: quiet, args: [{ listFor: options.listFor }], world: "ISOLATED",
-    });
+    }), 3000);
     return typeof first?.result === "number" ? first.result : Date.now() - started;
   } catch {
     return Date.now() - started;

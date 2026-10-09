@@ -21,7 +21,7 @@ function item(list, text, className) {
 }
 
 /** Runs a goal on a tab, shows the steps and the checklist, and returns the run result. */
-async function run(tabId, goal) {
+async function run(tabId, goal, options = {}) {
   $("run").disabled = true;
   $("steps").replaceChildren();
   $("checks").replaceChildren();
@@ -29,6 +29,7 @@ async function run(tabId, goal) {
   $("status").textContent = "Running…";
   try {
     const result = await runTask(tabId, goal, {
+      ...options,
       group: true,
       onStep: (s) => item($("steps"), `${s.operation} "${s.action}"${s.text ? ` = ${s.text}` : ""}${s.ok ? "" : ` (refused: ${s.reason})`}`, s.ok ? "" : "refused"),
     });

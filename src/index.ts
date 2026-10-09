@@ -12,3 +12,4 @@ export { runTask, type RunOptions, type RunResult } from "./run.js";
 export { groupTab, type TabGroupStatus } from "./tabgroup.js";
 export { glinerChooser, LABEL_CAP, type MindLike } from "./choosers/gliner.js";
 export { allowedBy, risky } from "./safety.js";
+export { sameSite, siteOf } from "./site.js";

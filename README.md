@@ -93,7 +93,12 @@ flowchart LR
    does not touch the page. A change it does not compare, such as other page
    text, does not stop it.
 5. `settle` waits until the DOM is quiet for 120 ms, at most 1.5 s.
-6. `verify` checks each value, date and setting, checks that the run sent the
+6. `runTask` stays on the site it starts on (the registrable domain, so
+   `shop.example.com` and `www.example.com` are one site). When a send or a
+   link moves the tab to another site, the run stops with
+   `blocked: "the page moved to another site"` before it acts there. Pass
+   `allowHosts` to name more sites that you or your gate judged.
+7. `verify` checks each value, date and setting, checks that the run sent the
    form it filled, and checks that the page is not an error, empty or captcha
    page.
 
@@ -126,12 +131,13 @@ foxpaw is a library. It has no CLI and no MCP server.
 
 | Export | What it does |
 |---|---|
-| `runTask(tabId, goal, options?)` | Runs a goal on a tab and returns a `RunResult`: `status` (`done`, `blocked`, `stopped`, `error`), `verified`, `checks`, `steps`, `refusals`, `blockedReason`, `unmatched`, `totalMs`. Options: `chooser`, `maxSteps` (40), `today`, `group`, `onStep`, `signal`. |
+| `runTask(tabId, goal, options?)` | Runs a goal on a tab and returns a `RunResult`: `status` (`done`, `blocked`, `stopped`, `error`), `verified`, `checks`, `steps`, `refusals`, `blockedReason`, `unmatched`, `totalMs`. Options: `chooser`, `maxSteps` (40), `today`, `group`, `onStep`, `signal`, `allowHosts`. |
 | `snapshot(tabId)` | Reads every frame of the tab into a `Snapshot` of `Control` objects. |
 | `act(tabId, control, request, snapshot)` | Does one operation on one control: `click`, `type`, `select`, `check`, `uncheck`, `date`, `enter` or `scroll`. Returns `{ ok }`, or `{ ok: false, reason }` with `stale`, `gone`, `hidden`, `covered`, `disabled`, `readonly`, `unsupported` or `navigated`. |
 | `settle(tabId, options?)` | Waits for a quiet page. With `listFor`, it first waits for a field's suggestion list. |
 | `verify(page, state, sentFrom?)` | Builds the result checklist. `problemOf(page)` names an error, empty or captcha page. |
 | `parseGoal(goal)` | Splits a goal into requirements. |
+| `siteOf(url)`, `sameSite(start, url, allowHosts?)` | The registrable domain of a URL, and the site check `runTask` uses. |
 | `start`, `decide`, `record` | The controller, one step at a time, for callers that run their own loop. |
 | `ruleChooser()` | A `Chooser` with no model: word overlap, synonyms and type fit. Returns `null` on a tie. |
 | `glinerChooser(mind)` | A `Chooser` backed by GLiNER2 through a [foxmind](https://github.com/pooriaarab/foxmind) `Mind`, or any object with its `extract` and `classify` methods. |
@@ -185,6 +191,9 @@ The controller does not act on a score below 0.4.
   miss an error message inside a normal page.
 - `verify` checks what the form shows. It does not check that the results a
   site shows after the send are correct.
+- The site check has no full public suffix list. It knows common two-part
+  suffixes such as `co.uk` and `github.io`. On another suffix, two hosts under
+  it can count as one site.
 - foxpaw does not solve captchas. It stops with `blocked: "captcha"`.
 - The demo extension bundles no model, so its GLiNER2 option is off.
 - E2E tests cover local fixture pages only, not live sites.

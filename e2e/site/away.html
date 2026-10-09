@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Newsletter</title></head>
+  <body>
+    <h1>Newsletter</h1>
+    <!-- The send and the link go to another host, localhost, which has its own form (C18). -->
+    <form id="news" method="get">
+      <label>Email <input name="email" type="email" /></label>
+      <button type="submit">Join</button>
+    </form>
+    <p><a id="partner">Partner profile</a></p>
+    <script>
+      const other = `http://localhost:${location.port}/other-site.html`;
+      document.getElementById("news").action = other;
+      document.getElementById("partner").href = other;
+    </script>
+  </body>
+</html>
