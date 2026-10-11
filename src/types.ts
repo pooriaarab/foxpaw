@@ -50,6 +50,10 @@ export interface Control {
   secret: boolean;
   /** What `act` compares before it acts. Opaque. */
   guard: string;
+  /** A link's `href` attribute, as the page wrote it. */
+  href?: string;
+  /** A short hash of the text of the row, list item or card around the control. Absent outside one. */
+  row?: string;
 }
 
 /** The state of one frame when it was read. */
