@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Find a flight</title>
+    <style>
+      .field { position: relative; }
+      .listbox { position: absolute; z-index: 5; background: #fff; list-style: none; margin: 0; padding: 0; min-width: 260px; }
+      .listbox li { padding: 8px; }
+      #calendar { position: absolute; z-index: 6; width: 300px; background: #fff; }
+      #calendar .grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+      #tall { position: absolute; left: 10px; top: calc(100vh - 30px); height: 300px; }
+    </style>
+  </head>
+  <body>
+    <h1>Find a flight</h1>
+    <!-- Like foxbench's SkyFare: an autocomplete that picks on mousedown, and a text date field with a calendar that redraws. -->
+    <form id="search" action="results.html" method="get">
+      <div class="field"><label for="from">From</label>
+        <input id="from" name="from_text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="from-list" autocomplete="off" />
+        <input type="hidden" name="from" /><ul id="from-list" role="listbox" class="listbox" hidden></ul></div>
+      <div class="field"><label for="depart">Depart</label>
+        <input id="depart" name="depart_text" class="date" placeholder="MM/DD/YYYY" autocomplete="off" /></div>
+      <p><button type="submit" id="send">Search flights</button></p>
+    </form>
+    <div id="calendar" role="dialog" aria-label="Choose a date" hidden></div>
+    <p>Picked: <output id="picked"></output> Month: <output id="month">0</output></p>
+    <button id="tall" type="button">Tall button</button>
+    <p>Last click: <output id="last">none</output></p>
+    <div style="height: 2000px"></div>
+    <button id="far" type="button">Far button</button>
+    <script>
+      const AIRPORTS = { LHR: "London Heathrow", LGW: "London Gatwick", CDG: "Paris Charles de Gaulle" };
+      const input = document.getElementById("from"), list = document.getElementById("from-list"), hidden = input.form.elements.from;
+      const pick = (code) => { input.value = AIRPORTS[code] + " (" + code + ")"; hidden.value = code; list.hidden = true; document.getElementById("picked").textContent = code; };
+      input.addEventListener("input", () => {
+        const q = input.value.trim().toLowerCase();
+        const hits = Object.entries(AIRPORTS).filter(([c, n]) => q && (c.toLowerCase().startsWith(q) || n.toLowerCase().includes(q)));
+        list.innerHTML = hits.map(([c, n]) => '<li role="option" data-code="' + c + '">' + n + " (" + c + ")</li>").join("");
+        list.hidden = !hits.length;
+      });
+      list.addEventListener("mousedown", (e) => { const li = e.target.closest("li"); if (li) { e.preventDefault(); pick(li.dataset.code); } });
+      input.addEventListener("blur", () => setTimeout(() => { list.hidden = true; }, 150));
+      const cal = document.getElementById("calendar"), depart = document.getElementById("depart");
+      let month = 0;
+      const draw = () => {
+        let days = "";
+        for (let d = 1; d <= 30; d++) days += '<button type="button" data-day="' + d + '" aria-label="Day ' + d + ' of month ' + month + '">' + d + "</button>";
+        cal.innerHTML = '<button type="button" data-step="1" aria-label="Next month">›</button><div class="grid">' + days + "</div>";
+        document.getElementById("month").textContent = String(month);
+      };
+      depart.addEventListener("focus", () => { cal.hidden = false; draw(); depart.after(cal); });
+      cal.addEventListener("mousedown", (e) => e.preventDefault());
+      cal.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b?.dataset.step) { month++; draw(); } });
+      document.addEventListener("mousedown", (e) => { if (!cal.contains(e.target) && e.target !== depart) cal.hidden = true; });
+      for (const id of ["tall", "far"]) document.getElementById(id).addEventListener("click", () => { document.getElementById("last").textContent = id; });
+    </script>
+  </body>
+</html>
