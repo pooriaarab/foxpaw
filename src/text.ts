@@ -40,7 +40,8 @@ function line(c: Control): string {
   const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", c.expanded && "expanded",
     c.submit && "sends the form"].filter(Boolean);
   const options = c.options?.length ? ` options=[${c.options.map((o) => quote(o.value)).join(",")}]` : "";
-  const value = c.secret ? (c.value ? ` value="${MASK}"` : "") : c.value && c.value !== c.label ? ` value=${quote(c.value)}` : "";
+  // A checkbox or a radio is checked by its id; its form value is noise (T11).
+  const value = c.secret ? (c.value ? ` value="${MASK}"` : "") : c.value && c.value !== c.label && c.role !== "checkbox" && c.role !== "radio" ? ` value=${quote(c.value)}` : "";
   return `[${c.id}] ${c.role} ${quote(c.label)}${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
 }
 
@@ -123,12 +124,25 @@ export function pageText(page: Snapshot, options: PageTextOptions = {}): string 
   const lines = kept.map((item) => ("fold" in item ? foldLine(item.fold) : line(item.control)));
   if (left > 0) lines.push(`... ${left} more controls`);
 
-  const shown = new Set(kept.flatMap((item) => ("fold" in item ? item.fold : [item.control])).map((c) => c.label.trim()).filter(Boolean));
+  const keptControls = kept.flatMap((item) => ("fold" in item ? item.fold : [item.control]));
+  const shown = new Set(keptControls.map((c) => c.label.trim()).filter(Boolean));
+  // Long values a control line shows (T12), and the labels with no spaces, to find menu text run together (T13).
+  const values = keptControls.filter((c) => !c.secret && c.value.length >= 20).map((c) => c.value.replace(/\s+/g, " "));
+  const bare = [...shown].map((l) => l.replace(/\s+/g, "")).filter(Boolean);
+  const onlyLabels = (unit: string) => {
+    const s = unit.replace(/\s+/g, "");
+    if (s.length > 200) return false;
+    const can = [true];
+    for (let i = 0; i < s.length; i++) if (can[i]) for (const l of bare) if (s.startsWith(l, i)) can[i + l.length] = true;
+    return can[s.length] === true;
+  };
   const seen = new Set<string>();
   const text = units(page.text).filter((unit) => {
     if (wrapped(unit) || ALERT.test(unit)) return true;
     if (!/[\p{L}\p{N}]/u.test(unit)) return false;
     if (shown.has(unit)) return false;
+    if (unit.length >= 20 && values.some((v) => v.includes(unit))) return false;
+    if (onlyLabels(unit)) return false;
     if (unit.length > SHORT || /\d/.test(unit)) return true;
     if (seen.has(unit)) return false;
     seen.add(unit);
