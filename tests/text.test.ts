@@ -142,6 +142,23 @@ describe("pageText budget and text", () => {
     expect(changeText(prior, { ...prior, text: `${prior.text}\n[0:9] button "Pay"` }).text).toContain('New text:\n| [0:9] button "Pay"');
   });
 
+  it("T10: a filled password and an OTP field show as masked; an empty one shows no value", () => {
+    const text = pageText(page([
+      control(1, "textbox", "Password", { secret: true, value: "hunter2-secret" }),
+      control(2, "textbox", "One-time code", { secret: true, value: "482913" }),
+      control(3, "textbox", "Confirm password", { secret: true }),
+      control(4, "textbox", "Email", { value: "sam@example.com" }),
+    ]));
+    expect(text).not.toContain("hunter2");
+    expect(text).not.toContain("482913");
+    expect(text).toContain('[0:1] textbox "Password" value="•••"');
+    expect(text).toContain('[0:2] textbox "One-time code" value="•••"');
+    expect(controlLines(text)).toContain('[0:3] textbox "Confirm password"');
+    expect(text).toContain('[0:4] textbox "Email" value="sam@example.com"');
+    // A secret value that equals its label is still masked.
+    expect(pageText(page([control(1, "textbox", "1234", { secret: true, value: "1234" })]))).toContain('"1234" value="•••"');
+  });
+
   it("T6: a repeated line with a number, such as a price, stays", () => {
     expect(pageText(page([], "$19.99\nAdd to cart\n$19.99\nAdd to cart"))).toMatch(/Text:\n\| \$19\.99\n\| Add to cart\n\| \$19\.99$/);
   });
@@ -185,11 +202,26 @@ describe("changeText", () => {
     expect(changeText(before, renumbered).full).toBe(true);
   });
 
-  it("D4: a password shows as the snapshot shows it, never as empty", () => {
+  it("D4: a password shows as masked, never as empty and never as the snapshot holds it", () => {
     const typed = edit(before, "0:7", { value: "•••" });
     expect(changeText(before, typed, { target: "0:7" }).text).toContain('[0:7] textbox "Password" value="•••"');
     const redacted = edit(before, "0:7", { value: "[redacted]" });
-    expect(changeText(redacted, redacted, { target: "0:7" }).text).toContain('[0:7] textbox "Password" value="[redacted]"');
+    expect(changeText(redacted, redacted, { target: "0:7" }).text).toContain('Acted on:\n[0:7] textbox "Password" value="•••"');
+  });
+
+  it("D7: a changed password or OTP says only that it changed, never a value", () => {
+    const plain = edit(before, "0:7", { value: "hunter2-secret" });
+    const filled = changeText(before, plain, { target: "0:7" }).text;
+    expect(filled).toContain('Changed:\n[0:7] textbox "Password" value="•••": filled');
+    expect(filled).not.toContain("hunter2");
+    const edited = changeText(plain, edit(before, "0:7", { value: "hunter3-secret" }), { target: "0:7" }).text;
+    expect(edited).toContain('[0:7] textbox "Password" value="•••": changed');
+    expect(edited).not.toMatch(/hunter/);
+    expect(changeText(plain, before).text).toContain('Changed:\n[0:7] textbox "Password": cleared');
+    const otp = page([control(1, "textbox", "One-time code", { secret: true }), control(2, "button", "Verify"), control(3, "textbox", "Note")]);
+    const typedOtp = changeText(otp, edit(otp, "0:1", { value: "482913" })).text;
+    expect(typedOtp).toContain('Changed:\n[0:1] textbox "One-time code" value="•••": filled');
+    expect(typedOtp).not.toContain("482913");
   });
 
   it("D5, D6: no change says so, and a new captcha is named", () => {
