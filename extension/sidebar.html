@@ -7,26 +7,31 @@
   </head>
   <body>
     <header>
-      <h1>foxpaw</h1>
+      <div class="title">
+        <img class="mark" src="icons/icon-48.png" alt="" width="22" height="22" />
+        <h1>foxpaw</h1>
+      </div>
       <p>Type a goal for the current tab. foxpaw reads the page, acts on it, and checks the result.</p>
     </header>
-    <form id="goal-form">
+    <form id="goal-form" class="card">
       <label for="goal">Goal</label>
       <textarea id="goal" rows="4" placeholder="Name: Sam Lee, email: sam@example.com, accept the terms"></textarea>
       <fieldset>
         <legend>Chooser</legend>
-        <label><input type="radio" name="chooser" value="rule" checked /> Rules (no model)</label>
-        <label><input type="radio" name="chooser" value="gliner" disabled /> GLiNER2 through foxmind</label>
-        <p class="note" id="gliner-note">This build has no foxmind model, so only the rules chooser runs.</p>
+        <label class="switch"><input type="radio" name="chooser" value="rule" checked /> Rules (no model)</label>
+        <label class="switch off"><input type="radio" name="chooser" value="gliner" disabled /> GLiNER2 through foxmind</label>
+        <p class="note hint" id="gliner-note">This build has no foxmind model, so only the rules chooser runs.</p>
       </fieldset>
-      <button id="run" type="submit">Run</button>
+      <button id="run" class="primary" type="submit">Run</button>
     </form>
     <section aria-label="Run">
       <p id="status" role="status">Ready.</p>
       <h2>Steps</h2>
       <ol id="steps"></ol>
+      <p class="empty">No step yet.</p>
       <h2>Checklist</h2>
       <ul id="checks"></ul>
+      <p class="empty">foxpaw checks the page after a run.</p>
     </section>
     <script src="sidebar.js"></script>
   </body>
