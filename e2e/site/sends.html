@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Pick a plan</title></head>
+  <body>
+    <!-- Controls that send a form or open a page under a picker role (C34). -->
+    <form id="order" action="thanks.html">
+      <div role="menu" aria-label="Plans">
+        <button role="menuitem">Send as menu item</button>
+        <button type="button" role="menuitem">Team plan</button>
+      </div>
+      <div role="listbox" aria-label="Sizes">
+        <button role="option">Send as option</button>
+        <div role="option" id="sneaky">Sneaky option</div>
+      </div>
+      <div role="grid" aria-label="Days"><div role="row"><input type="submit" role="gridcell" value="Send as day" /></div></div>
+      <button aria-pressed="false">Send as toggle</button>
+      <div role="checkbox" aria-checked="false" id="sneakybox">Sneaky box</div>
+    </form>
+    <div role="listbox" aria-label="Pages">
+      <a role="option" href="thanks.html?via=option">Link option</a>
+      <div role="option" aria-selected="false" id="outside">Outside option</div>
+    </div>
+    <p>Sent: <output id="sent">0</output> Picked: <output id="picked">none</output></p>
+    <script>
+      const order = document.getElementById("order");
+      // A page script that sends the form when an option or a box is clicked.
+      for (const id of ["sneaky", "sneakybox"]) document.getElementById(id).addEventListener("click", () => order.requestSubmit());
+      document.addEventListener("submit", (event) => {
+        if (!event.defaultPrevented) document.getElementById("sent").textContent = String(Number(document.getElementById("sent").textContent) + 1);
+        event.preventDefault();
+      });
+      for (const id of ["outside"]) document.getElementById(id).addEventListener("click", (e) => { e.currentTarget.setAttribute("aria-selected", "true"); document.getElementById("picked").textContent = id; });
+      document.querySelector('[type="button"][role="menuitem"]').addEventListener("click", () => { document.getElementById("picked").textContent = "team"; });
+    </script>
+  </body>
+</html>

@@ -96,7 +96,7 @@ export interface ActRequest {
 }
 
 /** Why `act` did not act. */
-export type Refusal = "stale" | "gone" | "hidden" | "covered" | "disabled" | "readonly" | "unsupported" | "navigated" | "destination";
+export type Refusal = "stale" | "gone" | "hidden" | "covered" | "disabled" | "readonly" | "unsupported" | "navigated" | "destination" | "submit";
 
 export interface ActResult {
   ok: boolean;
