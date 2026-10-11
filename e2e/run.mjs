@@ -83,8 +83,8 @@ try {
   const store = await call("menu.html", "snapshot");
   const storeText = await textOf("pageText", store);
   const realIds = new Set(store.controls.map((c) => c.id));
-  const foldIds = (/ids (\d+:\d+) to (\d+:\d+)/.exec(storeText) ?? []).slice(1);
-  check("trim folds the menu and keeps the field inside it", { fold: 2, ids: true, search: true, submit: true },
+  const foldIds = [...(/\(5 links: (.*)\)/.exec(storeText)?.[1] ?? "").matchAll(/=(\d+:\d+)/g)].map((m) => m[1]);
+  check("trim folds the menu and keeps the field inside it", { fold: 5, ids: true, search: true, submit: true },
     { fold: foldIds.length, ids: foldIds.every((id) => realIds.has(id)), search: storeText.includes('searchbox "Search the store"'), submit: storeText.includes('"Sign in" (sends the form)') });
   check("trim keeps hidden text out", false, storeText.includes("evil.example"));
   const password = store.controls.find((c) => c.label === "Password");
@@ -98,13 +98,14 @@ try {
   const errorDiff = await textOf("changeText", typed2, failedSignIn);
   check("diff shows a new error message", { full: false, error: true, short: true },
     { full: errorDiff.full, error: errorDiff.text.includes("Wrong email or password."), short: errorDiff.text.length < storeText.length / 2 });
-  const pets = failedSignIn.controls.find((c) => c.label === "Pets");
+  const petsId = /"Pets"=(\d+:\d+)/.exec(storeText)?.[1];
+  const pets = failedSignIn.controls.find((c) => c.id === petsId);
   await call("menu.html", "act", pets, { op: "click" }, failedSignIn);
   await call("menu.html", "settle", {}).catch(() => 0);
   await new Promise((done) => setTimeout(done, 500));
   const moved = await call("thanks.html", "snapshot");
   const movedDiff = await textOf("changeText", failedSignIn, moved);
-  check("a folded link still works, and a navigation gives the whole page", { full: true, url: true, folded: true }, { full: movedDiff.full, url: moved.url.includes("thanks.html?c=7"), folded: foldIds.length === 2 && !storeText.includes('link "Pets"') });
+  check("a folded link works by the id in the text, and a navigation gives the whole page", { full: true, url: true, folded: true }, { full: movedDiff.full, url: moved.url.includes("thanks.html?c=7"), folded: !storeText.includes('link "Pets"') });
 
   // Run: snapshot -> choose -> stale check -> act -> settle -> verify, with ruleChooser.
   const runs = (record.runs = {});

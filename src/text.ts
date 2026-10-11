@@ -5,17 +5,10 @@
 // it formats Snapshots (docs/failure-modes.md T1-T7, D1-D5).
 import type { Control, Snapshot } from "./types.js";
 
-export interface PageTextOptions {
-  /** The most control lines (a folded run counts as one). Default: 40. */
-  maxControls?: number;
-  /** Fold runs of short links, such as menus, into one line. Default: true. */
-  fold?: boolean;
-}
-
-export interface ChangeOptions extends PageTextOptions {
-  /** The id of the control the action used. Its line is always in the diff. */
-  target?: string;
-}
+/** `maxControls`: the most controls; a folded link counts as a quarter. Default: 40. */
+export interface PageTextOptions { maxControls?: number }
+/** `target`: the id of the control the action used. Its line is always in the diff. */
+export interface ChangeOptions extends PageTextOptions { target?: string }
 
 /** What `changeText` returns. `full` is true when `text` is the whole page, not a diff. */
 export interface Change { full: boolean; text: string }
@@ -31,20 +24,19 @@ const OPEN = /^\s*<untrusted-data[\s>]/, CLOSE = /^\s*<\/untrusted-data>\s*$/;
 
 type Item = { control: Control } | { fold: Control[] };
 
+/** Page text as one JSON-quoted line, with wrapper markers escaped (T8). */
+const quote = (text: string) => JSON.stringify(text.replace(/\s+/g, " ").trim().replace(/<(\s*\/?\s*untrusted-data)/gi, "&lt;$1"));
+
 /** One control as one line, for example `[0:6] textbox "Email" value="sam@example.com" (required)`. */
 function line(c: Control): string {
   const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", c.expanded && "expanded",
     c.submit && "sends the form"].filter(Boolean);
   const options = c.options?.length ? ` options=${JSON.stringify(c.options.map((o) => o.value))}` : "";
-  const value = c.value && c.value !== c.label ? ` value="${c.value}"` : "";
-  return `[${c.id}] ${c.role} "${c.label}"${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
+  const value = c.value && c.value !== c.label ? ` value=${quote(c.value)}` : "";
+  return `[${c.id}] ${c.role} ${quote(c.label)}${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
 }
 
-function foldLine(run: Control[]): string {
-  const names = run.slice(0, 4).map((c) => c.label).join(", ");
-  const more = run.length > 4 ? `, +${run.length - 4} more` : "";
-  return `(${run.length} links: ${names}${more}; ids ${run[0]!.id} to ${run.at(-1)!.id})`;
-}
+const foldLine = (run: Control[]) => `(${run.length} links: ${run.map((c) => `${quote(c.label)}=${c.id}`).join(", ")})`;
 
 /**
  * The page text split into units: one trimmed line, or one whole wrapped
@@ -67,7 +59,7 @@ function units(text: string): string[] {
 const wrapped = (unit: string) => unit.includes("\n") || OPEN.test(unit);
 
 /** The controls in page order, duplicate links left out, and runs of short links folded. */
-function items(page: Snapshot, fold: boolean): Item[] {
+function items(page: Snapshot): Item[] {
   const out: Item[] = [];
   const seen = new Set<string>();
   let run: Control[] = [];
@@ -77,12 +69,12 @@ function items(page: Snapshot, fold: boolean): Item[] {
     run = [];
   };
   for (const c of page.controls) {
-    if (c.role === "link" && c.href) {
+    if (c.role === "link" && c.href && !/^\s*(?:#|javascript:)/i.test(c.href)) {
       const key = JSON.stringify([c.frameId, c.label, c.href]);
       if (seen.has(key)) continue;
       seen.add(key);
     }
-    if (!fold || c.role !== "link" || c.form !== undefined || c.dialog || c.label.length > SHORT) {
+    if (c.role !== "link" || c.form !== undefined || c.dialog || c.label.length > SHORT) {
       flush();
       out.push({ control: c });
       continue;
@@ -96,26 +88,27 @@ function items(page: Snapshot, fold: boolean): Item[] {
   return out;
 }
 
-/** Fields, submit buttons and open dialogs first; then what is on screen; then folds; then the rest (T1, T2). */
-function rank(item: Item): number {
-  if ("fold" in item) return 2;
-  const c = item.control;
-  if (FIELDS.has(c.role) || c.submit || c.dialog) return 0;
-  return c.offscreen ? 3 : 1;
-}
+/** Submit buttons first; then fields and open dialogs; then what is on screen; then folds; then the rest (T1, T2, T9). */
+const rank = (item: Item): number => "fold" in item ? 2 : item.control.submit ? -1
+  : FIELDS.has(item.control.role) || item.control.dialog ? 0 : item.control.offscreen ? 3 : 1;
 
 /**
- * The page as text for a planner: the title, the address, up to 40 control
- * lines and the visible text. Menus fold to one line, duplicate links go,
- * and text lines that only repeat a shown label go. The kept control lines
- * stay in page order. Every control stays in the snapshot, so a folded id
- * still works for `act`.
+ * The page as text for a planner: the title, the address, up to 40 controls
+ * and the visible text. A menu folds to one line that names each link and
+ * its id. Duplicate links go, and text that only repeats a shown label goes.
+ * The kept control lines stay in page order.
  */
 export function pageText(page: Snapshot, options: PageTextOptions = {}): string {
   const max = options.maxControls ?? MAX_CONTROLS;
-  const all = items(page, options.fold ?? true);
-  const picked = new Set(all.map((item, i) => [item, i] as const)
-    .toSorted((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).slice(0, max).map(([item]) => item));
+  const all = items(page);
+  let room = max;
+  const picked = new Set(all.map((item, i) => [item, i] as const).toSorted((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+    .map(([item]) => item).filter((item) => {
+      const cost = "fold" in item ? Math.ceil(item.fold.length / 4) : 1;
+      if (cost > room) return false;
+      room -= cost;
+      return true;
+    }));
   const kept = all.filter((item) => picked.has(item));
   const left = all.filter((item) => !picked.has(item)).reduce((n, item) => n + ("fold" in item ? item.fold.length : 1), 0);
   const lines = kept.map((item) => ("fold" in item ? foldLine(item.fold) : line(item.control)));
@@ -126,20 +119,23 @@ export function pageText(page: Snapshot, options: PageTextOptions = {}): string 
   const text = units(page.text).filter((unit) => {
     if (wrapped(unit) || ALERT.test(unit)) return true;
     if (shown.has(unit)) return false;
-    if (unit.length > SHORT) return true;
+    if (unit.length > SHORT || /\d/.test(unit)) return true;
     if (seen.has(unit)) return false;
     seen.add(unit);
     return true;
   });
-  return [`Title: ${page.title}`, `Address: ${page.url}`, "Controls:", ...lines, "Text:", ...text].join("\n");
+  return [`Title: ${quote(page.title)}`, `Address: ${page.url}`, "Controls:", ...lines, "Text:", ...text].join("\n");
 }
+
+/** When the frame's document loaded: the first item of readFrame's key. */
+const loaded = (key: string) => (JSON.parse(key) as unknown[])[0];
 
 /** The same document in every frame: no navigation and no reload (D2). */
 function sameFrames(a: Snapshot, b: Snapshot): boolean {
   if (a.url !== b.url || a.frames.length !== b.frames.length) return false;
   return a.frames.every((f, i) => {
     const g = b.frames[i];
-    return !!g && g.frameId === f.frameId && g.url === f.url && g.documentId === f.documentId;
+    return !!g && g.frameId === f.frameId && g.url === f.url && g.documentId === f.documentId && loaded(g.key) === loaded(f.key);
   });
 }
 
@@ -177,7 +173,8 @@ export function changeText(before: Snapshot, after: Snapshot, options: ChangeOpt
   const removed = [...was.values()].reduce((sum, n) => sum + n, 0);
 
   const out = [`The page did not navigate: ${after.url}`];
-  if (after.title !== before.title) out.push(`New title: ${after.title}`);
+  if (after.title !== before.title) out.push(`New title: ${quote(after.title)}`);
+  if (after.captcha && !before.captcha) out.push("A captcha is now on the page.");
   const target = after.controls.find((c) => c.id === options.target);
   if (target && !changed.includes(target) && !added.includes(target)) out.push("Acted on:", line(target));
   if (changed.length) out.push("Changed:", ...changed.map(line));
@@ -185,7 +182,7 @@ export function changeText(before: Snapshot, after: Snapshot, options: ChangeOpt
   if (gone.length) out.push("Gone:", ...gone.map(line));
   if (removed) out.push(`(${removed} lines of text went away.)`);
   if (fresh.length) out.push("New text:", ...fresh);
-  if (!changed.length && !added.length && !gone.length && !fresh.length && !removed && after.title === before.title) {
+  if (!changed.length && !added.length && !gone.length && !fresh.length && !removed && after.title === before.title && after.captcha === before.captcha) {
     out.splice(1, 0, "Nothing on the page changed.");
   }
   return { full: false, text: out.join("\n") };

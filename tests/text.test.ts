@@ -16,28 +16,19 @@ const NO_ROW = (0x811c9dc5 >>> 0).toString(36);
  */
 function load(name: string): Snapshot {
   const read = JSON.parse(readFileSync(`tests/fixtures/${name}.json`, "utf8")) as FrameRead;
-  const controls = read.controls.map((c) => {
+  const controls = read.controls.map(({ popupFor: _p, ...c }) => {
     const guard = JSON.parse(c.guard) as unknown[];
     const row = String(guard[8]).split("|").at(-1) ?? "";
-    const { popupFor: _p, ...rest } = c;
-    return {
-      ...rest, id: `0:${c.node}`, frameId: 0,
-      ...(c.role === "link" && typeof guard[7] === "string" ? { href: guard[7] } : {}),
-      ...(row && row !== NO_ROW ? { row } : {}),
-    } as Control;
+    return { ...c, id: `0:${c.node}`, frameId: 0, ...(c.role === "link" && typeof guard[7] === "string" ? { href: guard[7] } : {}),
+      ...(row && row !== NO_ROW ? { row } : {}) } as Control;
   });
   return { url: read.url, title: read.title, text: read.text, headings: read.headings, controls, frames: [{ frameId: 0, url: read.url, key: read.key, documentId: "doc-1" }], captcha: read.captcha, more: read.more };
 }
 
 /** foxloop's page text before this change, to measure against. */
 function untrimmed(page: Snapshot): string {
-  const lines = page.controls.slice(0, 40).map((c) => {
-    const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", c.submit && "sends the form"].filter(Boolean);
-    const options = c.options?.length ? ` options=${JSON.stringify(c.options.map((o) => o.value))}` : "";
-    return `[${c.id}] ${c.role} "${c.label}"${c.value ? ` value="${c.value}"` : ""}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
-  });
-  if (page.controls.length > 40) lines.push(`... ${page.controls.length - 40} more controls`);
-  return [`Title: ${page.title}`, `Address: ${page.url}`, "Controls:", ...lines, "Text:", page.text].join("\n");
+  const lines = page.controls.slice(0, 40).map((c) => `[${c.id}] ${c.role} "${c.label}"${c.value ? ` value="${c.value}"` : ""}${c.submit ? " (sends the form)" : ""}`);
+  return [`Title: ${page.title}`, `Address: ${page.url}`, "Controls:", ...lines, `... ${page.controls.length - 40} more controls`, "Text:", page.text].join("\n");
 }
 
 const control = (node: number, role: string, label: string, more: Partial<Control> = {}): Control => ({
@@ -157,11 +148,8 @@ describe("changeText", () => {
     expect(change.text).toContain('[0:6] textbox "Work email" value="sam@example"');
     expect(change.text).toContain("Enter a valid email address.");
     expect(change.text.length).toBeLessThan(pageText(after).length / 3);
-  });
-
-  it("D1: new text too long for a diff gives the whole page", () => {
-    const after = { ...before, text: `${before.text}\n${"A long new paragraph of text. ".repeat(50)}` };
-    expect(changeText(before, after)).toEqual({ full: true, text: pageText(after) });
+    const long = { ...before, text: `${before.text}\n${"A long new paragraph of text. ".repeat(50)}` };
+    expect(changeText(before, long)).toEqual({ full: true, text: pageText(long) });
   });
 
   it("D2: a navigation gives the whole page", () => {
@@ -169,6 +157,10 @@ describe("changeText", () => {
     expect(changeText(load("mail-compose"), after)).toEqual({ full: true, text: pageText(after) });
     const reloaded = { ...before, frames: [{ ...before.frames[0]!, documentId: "doc-2" }] };
     expect(changeText(before, reloaded).full).toBe(true);
+    // Without document ids, a reload of the same address still gives the whole page.
+    const frames = (origin: number) => [{ frameId: 0, url: before.url, key: JSON.stringify([origin, before.url, []]) }];
+    expect(changeText({ ...before, frames: frames(1) }, { ...before, frames: frames(1) }).full).toBe(false);
+    expect(changeText({ ...before, frames: frames(1) }, { ...before, frames: frames(2) }).full).toBe(true);
   });
 
   it("D3: a re-mounted control shows as gone and new; new ids for most give the whole page", () => {
@@ -188,22 +180,10 @@ describe("changeText", () => {
     expect(changeText(redacted, redacted, { target: "0:7" }).text).toContain('[0:7] textbox "Password" value="[redacted]"');
   });
 
-  it("D2: without document ids, a reload of the same address gives the whole page", () => {
-    const plain = page([control(1, "textbox", "Email")]);
-    const frames = (origin: number) => [{ frameId: 0, url: plain.url, key: JSON.stringify([origin, plain.url, []]) }];
-    expect(changeText({ ...plain, frames: frames(1) }, { ...plain, frames: frames(1) }).full).toBe(false);
-    expect(changeText({ ...plain, frames: frames(1) }, { ...plain, frames: frames(2) }).full).toBe(true);
-  });
-
-  it("D6: a captcha that appears is in the diff", () => {
+  it("D5, D6: no change says so, and a new captcha is named", () => {
+    expect(changeText(before, before, { target: "0:16" })).toEqual({ full: false,
+      text: 'The page did not navigate: http://127.0.0.1:4199/signup/\nNothing on the page changed.\nActed on:\n[0:16] button "Create account" (sends the form)' });
     expect(changeText(before, { ...before, captcha: true }).text).toContain("A captcha is now on the page.");
-  });
-
-  it("D5: no change says so", () => {
-    const change = changeText(before, before, { target: "0:16" });
-    expect(change).toMatchObject({ full: false });
-    expect(change.text).toContain("Nothing on the page changed.");
-    expect(change.text).toContain('[0:16] button "Create account"');
   });
 
   it("T7: a new wrapped block comes through whole", () => {

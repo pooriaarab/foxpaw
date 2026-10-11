@@ -17,10 +17,7 @@
     </form>
     <p id="error" role="alert"></p>
     <script>
-      document.getElementById("login").addEventListener("submit", (event) => {
-        event.preventDefault();
-        document.getElementById("error").textContent = "Wrong email or password.";
-      });
+      login.onsubmit = (event) => { event.preventDefault(); error.textContent = "Wrong email or password."; };
     </script>
   </body>
 </html>
