@@ -150,19 +150,29 @@ export async function perform(node: number, request: ActRequest, expect: { guard
     } else if (op === "select" && e.tagName !== "SELECT" && (e.getAttribute("role") === "combobox" || e.getAttribute("aria-autocomplete") === "list") &&
       (e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement)) {
       // An autocomplete field: type the value, then pick the one suggestion that holds it (P15).
-      typeText(value);
       const want = value.trim().toLowerCase();
       const owner = e.parentElement?.closest('[role="combobox"]');
       const ids = [...new Set([e, owner].filter((n): n is Element => !!n).flatMap((n) => `${n.getAttribute("aria-controls") || ""} ${n.getAttribute("aria-owns") || ""}`.trim().split(/\s+/)).filter(Boolean))];
       const options = () => ids.map((id) => (e.getRootNode() as Document).getElementById?.(id)).filter((l): l is HTMLElement => !!l)
         .flatMap((l) => [...l.querySelectorAll('[role="option"]')]).filter((o) => shownNow(o) && !o.closest('[aria-disabled="true"]'));
       const text = (o: Element) => (o.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-      let fits: Element[] = [];
-      for (let waited = 0; waited <= 1000; waited += 50) {
-        fits = options().filter((o) => text(o).includes(want));
-        if (fits.length > 1) fits = fits.filter((o) => text(o) === want).length === 1 ? fits.filter((o) => text(o) === want) : fits;
+      const holding = () => {
+        const all = options().filter((o) => text(o).includes(want));
+        const exact = all.filter((o) => text(o) === want);
+        return all.length > 1 && exact.length === 1 ? exact : all;
+      };
+      // A list that is open already; else the whole value, then the part in brackets, then the words before it.
+      let fits = holding();
+      const bracket = /\(([^)]+)\)/.exec(value)?.[1]?.trim();
+      const before = value.replace(/\([^)]*\)/, "").trim();
+      for (const query of [value, ...(bracket ? [bracket] : []), ...(before && before !== value.trim() ? [before] : [])]) {
         if (fits.length === 1) break;
-        await new Promise((done) => setTimeout(done, 50));
+        typeText(query);
+        for (let waited = 0; waited <= 1000; waited += 50) {
+          fits = holding();
+          if (fits.length === 1 || (waited >= 300 && !options().length)) break;
+          await new Promise((done) => setTimeout(done, 50));
+        }
       }
       if (fits.length !== 1) return { ok: false, reason: "unsupported", detail: `${fits.length} suggestions hold the value` };
       const o = fits[0]!;

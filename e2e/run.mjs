@@ -93,6 +93,11 @@ try {
   const picked = await onPicker("From", { op: "select", value: "lhr" });
   check("select picks the suggestion that holds the value", { ok: true, picked: "LHR", value: "London Heathrow (LHR)" },
     { ok: picked.ok, picked: await out("picked"), value: await picker.evaluate(() => document.getElementById("from").value) });
+  await onPicker("From", { op: "type", value: "London" });
+  const fromOpen = await onPicker("From", { op: "select", value: "London Gatwick (LGW)" });
+  check("select picks a suggestion that is open already, by its whole text", { ok: true, picked: "LGW" }, { ok: fromOpen.ok, picked: await out("picked") });
+  const byCode = await onPicker("From", { op: "select", value: "London Heathrow (LHR)" });
+  check("select types the code when the whole text finds no suggestion", { ok: true, picked: "LHR" }, { ok: byCode.ok, picked: await out("picked") });
   const dated = await onPicker("Depart", { op: "date", value: "12/01/2026" });
   const calendarAfter = await call("picker.html", "snapshot");
   check("date in a text field closes the calendar it opened", { ok: true, value: "12/01/2026", days: 0, hidden: true },
