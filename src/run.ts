@@ -25,7 +25,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   /**
    * More hosts the run may act on, with their subdomains. By default the run
-   * stays on the site (registrable domain) it starts on.
+   * stays on the site (registrable domain) it starts on. An entry with a "/"
+   * ("https://pay.example/charge") names form action URLs by prefix (C24).
    */
   allowHosts?: string[];
   /** The WebExtension `browser` object. Default: the global one. */
@@ -71,7 +72,7 @@ export async function runTask(tabId: number, goal: string, options: RunOptions =
   const started = Date.now();
   const browser = options.browser ?? api();
   const chooser = options.chooser ?? ruleChooser();
-  const state = await start(goal, chooser, options.today, { maxSteps: options.maxSteps });
+  const state = await start(goal, chooser, options.today, { maxSteps: options.maxSteps, allowHosts: options.allowHosts });
   const group = options.group ? await groupTab(tabId) : null;
   const result: RunResult = {
     goal, url: "", status: "error", verified: false, checks: [], steps: state.history, refusals: state.refusals,

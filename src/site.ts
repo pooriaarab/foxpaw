@@ -28,10 +28,39 @@ export function sameSite(start: string, url: string, allowHosts: string[] = []):
   const site = siteOf(url);
   // A page with no host (file:, about:) stays only on pages of its own scheme with no host.
   if (!site) return siteOf(start) === null && URL.canParse(url) && URL.canParse(start) && new URL(url).protocol === new URL(start).protocol;
-  if (site === siteOf(start)) return true;
+  return site === siteOf(start) || hostIn(url, allowHosts);
+}
+
+/** Is the URL's host one of `allowHosts` (the host of a URL entry), or under one? */
+function hostIn(url: string, allowHosts: string[]): boolean {
   const host = new URL(url).hostname.toLowerCase();
   return allowHosts.some((allowed) => {
-    const a = allowed.toLowerCase().replace(/^\*?\./, "");
+    const a = (URL.canParse(allowed) ? new URL(allowed).hostname : allowed).toLowerCase().replace(/^\*?\./, "");
     return host === a || host.endsWith(`.${a}`);
   });
+}
+
+/**
+ * Why a form on `page` may not send to `to` (C22, C24), or null when it may.
+ * `to` is undefined outside a form (C29 decides). A sensitive value goes only
+ * to an http or https action. An `allowHosts` entry with a "/" names an origin
+ * and a path prefix that ends at a "/". A host entry allows another origin,
+ * but not for a sensitive value, which stays in the page's folder or under its path.
+ */
+export function refuseDestination(page: string, to: string | undefined, allowHosts: string[], sensitive: boolean): string | null {
+  if (to === undefined) return null;
+  if (!/^https?:/i.test(to) || !URL.canParse(to)) return sensitive ? `the form sends a sensitive value to "${to}", which is not a web address` : null;
+  const [from, dest] = [new URL(page), new URL(to)];
+  const names = (a: string) => {
+    const base = URL.canParse(a) ? new URL(a) : null;
+    const path = base?.pathname.replace(/\/$/, "");
+    return base?.origin === dest.origin && (dest.pathname === path || dest.pathname.startsWith(`${path}/`));
+  };
+  if (allowHosts.some((a) => a.includes("/") && names(a))) return null;
+  if (dest.origin !== from.origin) {
+    return !sensitive && hostIn(to, allowHosts.filter((a) => !a.includes("/"))) ? null : `the form sends to ${dest.host}, which is not the origin of this page`;
+  }
+  const dir = from.pathname.slice(0, from.pathname.lastIndexOf("/") + 1);
+  const near = (dest.pathname.startsWith(dir) && !dest.pathname.slice(dir.length).includes("/")) || dest.pathname.startsWith(`${from.pathname}/`);
+  return !sensitive || near ? null : `the form sends a sensitive value to ${dest.pathname}, outside the path of this page`;
 }
