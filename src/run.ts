@@ -31,6 +31,14 @@ export interface RunOptions {
   allowHosts?: string[];
   /** The WebExtension `browser` object. Default: the global one. */
   browser?: ScriptingApi & { tabs?: { get(tabId: number): Promise<{ status?: string }> } };
+  /**
+   * Reads the page in place of foxpaw's `snapshot`, for every read in the
+   * run: the first one, the one after each action, and so the pages that
+   * `verify` checks. A caller puts its shield here (C31): a control the read
+   * leaves out is never acted on. The run still waits for the tab to load
+   * before each call. Default: `snapshot`.
+   */
+  read?: (tabId: number, browser: ScriptingApi) => Promise<Snapshot>;
 }
 
 export interface RunResult {
@@ -55,15 +63,15 @@ export interface RunResult {
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** Reads the tab, waiting up to 10 s for a document that can be read. */
-async function readTab(tabId: number, browser: RunOptions["browser"] & ScriptingApi): Promise<Snapshot> {
+/** Reads the tab with `read`, waiting up to 10 s for a document that can be read. */
+async function readTab(tabId: number, browser: RunOptions["browser"] & ScriptingApi, read: NonNullable<RunOptions["read"]>): Promise<Snapshot> {
   for (let attempt = 0; ; attempt++) {
     try {
-      if ((await browser.tabs?.get(tabId))?.status !== "loading") return await snapshot(tabId, browser);
+      if ((await browser.tabs?.get(tabId))?.status !== "loading") return await read(tabId, browser);
     } catch (error) {
       if (attempt >= 50) throw error;
     }
-    if (attempt >= 50) return snapshot(tabId, browser);
+    if (attempt >= 50) return read(tabId, browser);
     await sleep(200);
   }
 }
@@ -72,6 +80,7 @@ export async function runTask(tabId: number, goal: string, options: RunOptions =
   const started = Date.now();
   const browser = options.browser ?? api();
   const chooser = options.chooser ?? ruleChooser();
+  const read = options.read ?? snapshot;
   const state = await start(goal, chooser, options.today, { maxSteps: options.maxSteps, allowHosts: options.allowHosts });
   const group = options.group ? await groupTab(tabId) : null;
   const result: RunResult = {
@@ -81,7 +90,7 @@ export async function runTask(tabId: number, goal: string, options: RunOptions =
   let page: Snapshot | null = null;
   let sentFrom: Snapshot | undefined;
   try {
-    page = await readTab(tabId, browser);
+    page = await readTab(tabId, browser, read);
     const home = page.url;
     for (;;) {
       if (options.signal?.aborted) {
@@ -112,7 +121,7 @@ export async function runTask(tabId: number, goal: string, options: RunOptions =
       // A send may start a navigation: give it a moment to begin.
       if (next.effect === "send" && outcome.ok) await sleep(250);
       await settle(tabId, { frameId: next.control.frameId, ...(next.effect === "list" ? { listFor: next.control.node } : {}) }, browser);
-      page = await readTab(tabId, browser);
+      page = await readTab(tabId, browser, read);
       if (next.effect === "send" && sentFrom) confirmSend(state, sentFrom, page);
     }
   } catch (error) {
