@@ -114,6 +114,22 @@ try {
   check("scroll with no value brings the control into view", true,
     await picker.evaluate(() => { const r = document.getElementById("far").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
 
+  // A fill never sends (C34): select and check refuse a control that sends a form or opens a page.
+  const sendsPage = await open("sends.html");
+  const onSends = async (label, request) => {
+    const snap = await call("sends.html", "snapshot");
+    return call("sends.html", "act", snap.controls.find((c) => c.label === label), request, snap);
+  };
+  const refusals = [];
+  for (const [label, op] of [["Send as menu item", "select"], ["Send as option", "select"], ["Send as day", "select"], ["Send as toggle", "check"],
+    ["Link option", "select"], ["Sneaky option", "select"], ["Sneaky box", "check"]]) refusals.push((await onSends(label, { op })).reason);
+  check("a fill refuses a control that sends a form or opens a page", { reasons: Array(7).fill("submit"), sent: "0", url: true },
+    { reasons: refusals, sent: await sendsPage.evaluate(() => document.getElementById("sent").textContent), url: sendsPage.url().endsWith("/sends.html") });
+  const team = await onSends("Team plan", { op: "select" });
+  const outside = await onSends("Outside option", { op: "select" });
+  check("a fill still picks an option that sends nothing", { team: true, outside: true, picked: "outside" },
+    { team: team.ok, outside: outside.ok, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
+
   // Page text for a planner: the trim, and the diff after an action (T1-T7, D1-D5).
   const textOf = (fn, ...a) => ext.evaluate((f, args) => window.foxpaw[f](...args), fn, a);
   await open("menu.html");
