@@ -306,6 +306,8 @@ describe("controller", () => {
       expect((await run(goal, pay("http://fixture:8080/checkout/pay"), at)).end).toMatch(/^blocked: the form sends to fixture:8080/);
       expect((await run(goal, pay("http://fixture/attacker.test/express"), {}, ["fixture"])).end).toMatch(/^blocked: /);
       expect((await run(goal, pay("http://fixture/attacker.test/express"), {}, ["http://fixture/attacker.test/"])).end).toBe("sent: Pay");
+      const to = { form: 15, action: "http://fixture/attacker.test/x" };
+      for (const key of ["CVV2", "social security number", "sort code", "tax ID"]) expect((await run(`${key}: 123`, [c(key, to)])).acted).toEqual([]);
       // Enter: the field's action is where Enter sends (C26).
       expect((await run("card number: 4242 4242 4242 4242", [c("Card number", { form: 11, action: "http://fixture/attacker.test/x" })])).acted).toEqual([]);
     });
