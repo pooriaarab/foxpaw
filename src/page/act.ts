@@ -6,8 +6,8 @@
 // Adapted from foxpilot's actuate.ts (MIT).
 import type { ActRequest, ActResult } from "../types.js";
 
-/** `expect` is what the snapshot saw: the control's guard and its frame's key. */
-export async function perform(node: number, request: ActRequest, expect: { guard: string; key: string }): Promise<ActResult> {
+/** `expect` is what the snapshot saw: the control's guard, its frame's key and where it sends. */
+export async function perform(node: number, request: ActRequest, expect: { guard: string; key: string; to?: string }): Promise<ActResult> {
   const cache = window.__foxpaw;
   const e = cache?.nodes.get(node) as HTMLElement | undefined;
   if (!cache || !e?.isConnected) return { ok: false, reason: "gone" };
@@ -57,9 +57,20 @@ export async function perform(node: number, request: ActRequest, expect: { guard
     setTimeout(() => ring.remove(), 600);
   }
 
+  // A page script can move the form's destination as the send happens (C25):
+  // read it again before the click or Enter, and on submit, first and last.
+  const moved = () => expect.to !== undefined && cache.to(e) !== expect.to;
+  const refused: ActResult = { ok: false, reason: "destination", detail: "the form's destination changed as foxpaw sent it" };
   let submitted = false;
-  const onSubmit = () => { submitted = true; };
+  let changed = false;
+  const onSubmit = (event: Event) => {
+    submitted = true;
+    if (!moved()) return;
+    changed = true;
+    event.preventDefault();
+  };
   addEventListener("submit", onSubmit, true);
+  addEventListener("submit", onSubmit);
   try {
     const click = () => {
       const mouse = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0, detail: 1 };
@@ -73,7 +84,9 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       if (mouseEvents && fire("mousedown", 1)) e.focus({ preventScroll: true });
       fire("pointerup", 0);
       if (mouseEvents) fire("mouseup", 0);
+      if (moved()) return false;
       fire("click", 0);
+      return true;
     };
     // Replace the text like typing does. insertText fires beforeinput and
     // input, which React and editors listen for. When it does nothing, the
@@ -97,8 +110,9 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       return read();
     };
 
-    if (op === "click") click();
-    else if (op === "type") return { ok: true, value: typeText(value) };
+    if (op === "click") {
+      if (!click()) return refused;
+    } else if (op === "type") return { ok: true, value: typeText(value) };
     else if (op === "date") {
       if (input.type !== "date") return { ok: true, value: typeText(value) };
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, value);
@@ -129,14 +143,21 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       const press = down && e.dispatchEvent(new KeyboardEvent("keypress", { ...init, charCode: 13 }));
       // HTML implicit submission, unless the page handled the key itself.
       const form = input.form;
+      if (moved()) return refused;
       if (press && form && !submitted) {
         const button = [...form.elements].find((b): b is HTMLButtonElement => (b as HTMLButtonElement).type === "submit");
         if (button) { if (!button.disabled) button.click(); } else form.requestSubmit();
       }
       e.dispatchEvent(new KeyboardEvent("keyup", init));
     }
+    // Last resort: a script that ran after both checks. Stop the navigation.
+    if (changed || moved()) {
+      stop();
+      return refused;
+    }
   } finally {
     removeEventListener("submit", onSubmit, true);
+    removeEventListener("submit", onSubmit);
   }
   return { ok: true, submitted };
 }

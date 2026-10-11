@@ -17,7 +17,7 @@ export interface FrameRead {
     node: number; role: string; tag: string; type: string; label: string; name: string; placeholder: string;
     section: string; value: string; options?: { value: string; label: string; selected: boolean }[];
     checked?: boolean; expanded?: boolean; disabled: boolean; readOnly: boolean; required: boolean;
-    offscreen: boolean; form?: number; submit: boolean; dialog: boolean; popupFor?: number;
+    offscreen: boolean; form?: number; submit: boolean; action?: string; firstAction?: string; dialog: boolean; popupFor?: number;
     autocomplete: boolean; picker: boolean; dateFormat?: string; secret: boolean; guard: string;
     href?: string; row?: string;
   }[];
@@ -30,6 +30,10 @@ export interface PageCache {
   next: number;
   guard(e: Element): string | null;
   key(): string;
+  /** Where a click on the control, or Enter in it, sends its form (C25, C26). */
+  to(e: Element): string | null;
+  /** Each control's destination when foxpaw first read it (C25). */
+  first?: WeakMap<Element, string | null>;
 }
 
 declare global {
@@ -145,10 +149,27 @@ export function readFrame(): FrameRead | null {
   };
   const context = (e: Element): string => `${section(e)}|${rowHash(e)}`;
   const inRow = (e: Element) => !!e.closest('li,tr,dd,article,[role="row"],[role="listitem"],[role="option"],[role="article"]');
+  // Where a control sends (C22, C26): a submit button's formaction, else the
+  // first submit button's (what Enter presses), else the form's action. The
+  // prototype getters, because a field named "action" shadows form.action.
+  const formGet = (k: string) => Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, k)!.get!;
+  const submits = (e: Element) => !!f(e).form && (f(e).type === "submit" || f(e).type === "image");
+  cache.to = (e: Element) => {
+    const form = (f(e).form || e.closest("form")) as HTMLFormElement | null;
+    if (!form) return null;
+    const button = submits(e) ? e : [...(formGet("elements").call(form) as HTMLFormControlsCollection)].find(submits);
+    const own = button?.getAttribute("formaction");
+    try {
+      return own ? new URL(own, document.baseURI).href : String(formGet("action").call(form));
+    } catch {
+      return "";
+    }
+  };
   cache.guard = (e: Element) => e.isConnected && visible(e)
     ? JSON.stringify([role(e), name(e), shown(e), state(e) ?? null, f(e).selectedIndex ?? null, disabled(e),
-      e.getAttribute("aria-expanded"), e.getAttribute("href"), context(e)])
+      e.getAttribute("aria-expanded"), e.getAttribute("href"), context(e), cache.to(e)])
     : null;
+  const first = (cache.first ||= new WeakMap());
 
   // Autocomplete lists, found through the page's own ARIA links.
   const popups: { popup: Element; node: number }[] = [];
@@ -182,6 +203,8 @@ export function readFrame(): FrameRead | null {
     const typable = ["textbox", "searchbox", "spinbutton"].includes(rname) || (rname === "combobox" && e.tagName === "INPUT");
     const source = popups.find(({ popup }) => popup.contains(e));
     const dateFormat = typable ? formatOf(e) : undefined;
+    const to = cache.to(e);
+    if (!first.has(e)) first.set(e, to);
     controls.push({
       node: identity(e), role: rname, tag: e.tagName.toLowerCase(), type: e.tagName === "INPUT" ? f(e).type : "",
       label: name(e).slice(0, 200), name: e.getAttribute("name") || "", placeholder: e.getAttribute("placeholder") || "",
@@ -194,6 +217,7 @@ export function readFrame(): FrameRead | null {
       required: !!f(e).required || e.getAttribute("aria-required") === "true",
       offscreen, form: form ? identity(form) : undefined,
       submit: !!f(e).form && (f(e).type === "submit" || f(e).type === "image"),
+      ...(to === null ? {} : { action: to }), ...(first.get(e) === to ? {} : { firstAction: String(first.get(e)) }),
       dialog: !!e.closest('dialog,[role="dialog"],[aria-modal="true"],[role="listbox"],[role="menu"],[role="grid"]'),
       popupFor: source && ["option", "gridcell", "menuitem"].includes(rname) ? source.node : undefined,
       autocomplete: typable && (e.getAttribute("aria-autocomplete") === "list" || e.getAttribute("role") === "combobox" ||

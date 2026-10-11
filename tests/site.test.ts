@@ -1,6 +1,6 @@
 // C18: which hosts count as the same site.
 import { describe, expect, it } from "vitest";
-import { sameSite, siteOf } from "../src/site.js";
+import { refuseDestination, sameSite, siteOf } from "../src/site.js";
 
 describe("siteOf", () => {
   it.each([
@@ -38,5 +38,24 @@ describe("sameSite", () => {
   it("keeps a page with no host on pages of its own scheme", () => {
     expect(sameSite("file:///a.html", "file:///b.html")).toBe(true);
     expect(sameSite("file:///a.html", "https://example.com/")).toBe(false);
+  });
+});
+
+describe("refuseDestination (C24)", () => {
+  const P = "https://shop.example/checkout/pay";
+  it.each([
+    ["https://shop.example/checkout/express", [], true, false],
+    [`${P}?x=1`, [], true, false],
+    ["https://shop.example/api/pay", [], true, true],
+    ["https://pay.example.evil.com/steal", ["https://pay.example"], true, true],
+    ["https://pay.example/charge-evil", ["https://pay.example/charge"], true, true],
+    ["https://pay.example/charge/v2", ["https://pay.example/charge"], true, false],
+    ["mailto:a@evil.example", [], true, true],
+    ["javascript:alert(1)", [], true, true],
+    ["", [], true, true],
+    ["javascript:void(0)", [], false, false],
+    ["https://news.example/sub", ["news.example"], false, false],
+  ])("%s with %j, sensitive %s: refused %s", (to, allow, sensitive, refused) => {
+    expect(refuseDestination(P, to, allow as string[], sensitive) !== null).toBe(refused);
   });
 });
