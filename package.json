@@ -1,6 +1,6 @@
 {
   "name": "foxpaw",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Read a web page, act on it like a person, and check the result, from a Firefox extension.",
   "type": "module",
   "license": "MIT",
