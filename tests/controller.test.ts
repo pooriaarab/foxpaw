@@ -42,12 +42,13 @@ const checkoutPage = () => {
   return { express, real, all: [...express, ...real] };
 };
 /** Two forms with the same fields; the first posts to `action`, the second to /thanks. `more` adds fields to the first. */
+const fields = (form: number, to: string, extra: string[] = []) => [...["Email", "Full name", "Card number", "Expiry (MM/YY)", "CVC", ...extra]
+  .map((label) => c(label, { form, action: to })), c("Pay $40.00", { role: "button", submit: true, form, action: to })];
 const twin = (action: string, more: string[] = []) => {
-  const fields = (form: number, to: string, extra: string[] = []) => [...["Email", "Full name", "Card number", "Expiry (MM/YY)", "CVC", ...extra]
-    .map((label) => c(label, { form, action: to })), c("Pay $40.00", { role: "button", submit: true, form, action: to })];
   const fake = fields(8, action, more);
   return { fake, all: [...fake, ...fields(9, "http://fixture/thanks")] };
 };
+const loose = () => [c("Card number", { form: undefined }), c("Submit", { role: "button", form: undefined })];
 const CARD = "email: sam@example.com, full name: Sam Park, card number: 4242 4242 4242 4242, expiry: 12/29, CVC: 123";
 const none = (acted: string[], fake: Control[]) => acted.filter((id) => fake.some((x) => x.id === id));
 const make = (action: string) => [c("Email", { type: "email", form: 7, action }), c("Sign up", { role: "button", submit: true, form: 7, action })];
@@ -267,7 +268,7 @@ describe("controller", () => {
 
     it("does not send a form that posts to another site (C22)", async () => {
       expect((await run("email: a@b.co", make("https://collect.attacker.test/signup"))).end)
-        .toBe('blocked: the form sends to collect.attacker.test, which is not the site of this page');
+        .toBe('blocked: the form sends to collect.attacker.test, which is not the origin of this page');
       expect((await run("email: a@b.co", make("http://fixture/signup"))).end).toBe("sent: Sign up");
       expect((await run("email: a@b.co", make("https://collect.attacker.test/signup"), {}, ["attacker.test"])).end).toBe("sent: Sign up");
       expect((await run("email: a@b.co", make("javascript:void(0)"))).end).toBe("sent: Sign up");
@@ -336,7 +337,6 @@ describe("controller", () => {
     });
 
     it("sends a sensitive value from fields outside a form only by the button the goal names (C29)", async () => {
-      const loose = () => [c("Card number", { form: undefined }), c("Submit", { role: "button", form: undefined })];
       const out = await run("card number: 4242 4242 4242 4242, submit", loose());
       expect(out.end).toBe("blocked: fields outside a form send to an unknown place, so foxpaw sends a sensitive value only with the button the goal names");
       expect(out.acted).toHaveLength(1);

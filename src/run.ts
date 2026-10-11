@@ -25,7 +25,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   /**
    * More hosts the run may act on, with their subdomains. By default the run
-   * stays on the site (registrable domain) it starts on.
+   * stays on the site (registrable domain) it starts on. An entry with a "/"
+   * ("https://pay.example/charge") names form action URLs by prefix (C24).
    */
   allowHosts?: string[];
   /** The WebExtension `browser` object. Default: the global one. */

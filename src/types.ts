@@ -38,6 +38,8 @@ export interface Control {
   submit: boolean;
   /** Where its form sends, as a full URL: a submit button's `formaction`, else the form's `action`. Absent outside a form. */
   action?: string;
+  /** The `action` when foxpaw first read this control, only when it has changed since (C25). */
+  firstAction?: string;
   /** Inside a dialog, listbox or menu that is open over the page. */
   dialog: boolean;
   /** For an autocomplete option: the id of the field whose list holds it. */
@@ -50,7 +52,7 @@ export interface Control {
   dateFormat?: string;
   /** A password field. Its value never leaves the page. */
   secret: boolean;
-  /** What `act` compares before it acts. Opaque. */
+  /** What `act` compares before it acts, with where the control sends. Opaque. */
   guard: string;
   /** A link's `href` attribute, as the page wrote it. */
   href?: string;
@@ -94,7 +96,7 @@ export interface ActRequest {
 }
 
 /** Why `act` did not act. */
-export type Refusal = "stale" | "gone" | "hidden" | "covered" | "disabled" | "readonly" | "unsupported" | "navigated";
+export type Refusal = "stale" | "gone" | "hidden" | "covered" | "disabled" | "readonly" | "unsupported" | "navigated" | "destination";
 
 export interface ActResult {
   ok: boolean;

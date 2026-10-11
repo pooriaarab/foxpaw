@@ -136,12 +136,12 @@ try {
     { status: lookalike.status, page: paid.pathname, card: paid.searchParams.get("card"), express: lookalike.steps.some((s) => s.action === "Pay with Express") });
   const twin = await run("twin.html", 'email: sam@example.com, card number: 4242 4242 4242 4242, then click "Pay $40.00"');
   check("two forms that fit the same are not guessed", { status: "blocked", ambiguous: true, steps: 0 },
-    { status: twin.status, ambiguous: /^two forms fit the goal/.test(twin.blockedReason ?? ""), steps: twin.steps.length });
+    { status: twin.status, ambiguous: (twin.blockedReason ?? "").startsWith("two forms fit the goal"), steps: twin.steps.length });
   for (const on of ["pointerdown", "submit"]) {
-    const moved = await run(`moved.html?on=${on}`, "email: sam@example.com");
+    const shifted = await run(`moved.html?on=${on}`, "email: sam@example.com");
     const left = (await fox.browser.pages()).some((p) => p.url().includes("attacker.test"));
     check(`a send whose action changes on ${on} is refused`, { status: "blocked", reason: "the form's destination changed as foxpaw sent it", left: false },
-      { status: moved.status, reason: moved.blockedReason, left });
+      { status: shifted.status, reason: shifted.blockedReason, left });
   }
   const linked = await run("away.html", "open partner profile, name: Sam Lee");
   check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
