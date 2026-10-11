@@ -32,12 +32,15 @@ const quote = (text: string) => JSON.stringify(escape(text).replace(/[\s\u0085]+
 /** A text unit as the planner sees it: each page line starts with "| "; only a wrapper's own marker lines do not. */
 const show = (unit: string) => unit.split("\n").map((l, i, all) => (wrapped(unit) && (i === 0 || (i === all.length - 1 && CLOSE.test(l))) ? l : `| ${escape(l)}`)).join("\n");
 
+/** A secret control's value as the planner sees it: "•••" when it holds one, else nothing (T10). */
+const MASK = "•••";
+
 /** One control as one line, for example `[0:6] textbox "Email" value="sam@example.com" (required)`. */
 function line(c: Control): string {
   const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", c.expanded && "expanded",
     c.submit && "sends the form"].filter(Boolean);
   const options = c.options?.length ? ` options=[${c.options.map((o) => quote(o.value)).join(",")}]` : "";
-  const value = c.value && c.value !== c.label ? ` value=${quote(c.value)}` : "";
+  const value = c.secret ? (c.value ? ` value="${MASK}"` : "") : c.value && c.value !== c.label ? ` value=${quote(c.value)}` : "";
   return `[${c.id}] ${c.role} ${quote(c.label)}${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
 }
 
@@ -101,7 +104,8 @@ const rank = (item: Item): number => "fold" in item ? 2 : item.control.submit ? 
  * The page as text for a planner: the title, the address, up to 40 controls
  * and the visible text. A menu folds to one line that names each link and
  * its id. Duplicate links go, and text that only repeats a shown label goes.
- * The kept control lines stay in page order.
+ * The kept control lines stay in page order. A secret control's value
+ * shows as "•••", so a caller does not have to mask it first.
  */
 export function pageText(page: Snapshot, options: PageTextOptions = {}): string {
   const max = options.maxControls ?? MAX_CONTROLS;
@@ -147,15 +151,22 @@ function sameFrames(a: Snapshot, b: Snapshot): boolean {
   });
 }
 
-const state = (c: Control) => JSON.stringify([line(c), c.readOnly]);
+/** Compares real values, so a secret that changed shows as changed though both mask to "•••" (D7). */
+const state = (c: Control) => JSON.stringify([line(c), c.readOnly, c.value]);
+
+/** A changed control. A secret one says only that it changed, never a value (D7). */
+function changedLine(c: Control, was: Control): string {
+  if (!c.secret || c.value === was.value) return line(c);
+  return `${line(c)}: ${!c.value ? "cleared" : was.value ? "changed" : "filled"}`;
+}
 
 /**
  * What changed from `before` to `after`, the snapshots read before and after
  * one action. On the same document it gives a short diff: the controls that
  * changed, appeared or went away, a new title, and every new text line. When
  * the page navigated or most of it changed, it gives `pageText(after)` with
- * `full: true`. Values come from `after` as they are, so a password stays
- * "•••" or as the caller redacted it.
+ * `full: true`. A secret control never shows a value: a changed one says
+ * that it was filled, changed or cleared.
  */
 export function changeText(before: Snapshot, after: Snapshot, options: ChangeOptions = {}): Change {
   const whole: Change = { full: true, text: pageText(after, options) };
@@ -185,7 +196,7 @@ export function changeText(before: Snapshot, after: Snapshot, options: ChangeOpt
   if (after.captcha && !before.captcha) out.push("A captcha is now on the page.");
   const target = after.controls.find((c) => c.id === options.target);
   if (target && !changed.includes(target) && !added.includes(target)) out.push("Acted on:", line(target));
-  if (changed.length) out.push("Changed:", ...changed.map(line));
+  if (changed.length) out.push("Changed:", ...changed.map((c) => changedLine(c, old.get(c.id)!)));
   if (added.length) out.push("New:", ...added.map(line));
   if (gone.length) out.push("Gone:", ...gone.map(line));
   if (removed) out.push(`(${removed} lines of text went away.)`);
