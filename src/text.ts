@@ -25,13 +25,18 @@ const OPEN = /^\s*<untrusted-data[\s>]/, CLOSE = /^\s*<\/untrusted-data>\s*$/;
 type Item = { control: Control } | { fold: Control[] };
 
 /** Page text as one JSON-quoted line, with wrapper markers escaped (T8). */
-const quote = (text: string) => JSON.stringify(text.replace(/\s+/g, " ").trim().replace(/<(\s*\/?\s*untrusted-data)/gi, "&lt;$1"));
+// foxshield's INVISIBLE set (sanitize.ts), mirrored: foxpaw does not depend on foxshield.
+const INVISIBLE = /[\u200b-\u200d\u2060\u180e\ufeff\u202a-\u202e\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
+const escape = (text: string) => text.replace(INVISIBLE, "").replace(/<(\s*\/?\s*untrusted-data)/gi, "&lt;$1");
+const quote = (text: string) => JSON.stringify(escape(text).replace(/[\s\u0085]+/g, " ").trim());
+/** A text unit as the planner sees it: each page line starts with "| "; only a wrapper's own marker lines do not. */
+const show = (unit: string) => unit.split("\n").map((l, i, all) => (wrapped(unit) && (i === 0 || (i === all.length - 1 && CLOSE.test(l))) ? l : `| ${escape(l)}`)).join("\n");
 
 /** One control as one line, for example `[0:6] textbox "Email" value="sam@example.com" (required)`. */
 function line(c: Control): string {
   const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", c.expanded && "expanded",
     c.submit && "sends the form"].filter(Boolean);
-  const options = c.options?.length ? ` options=${JSON.stringify(c.options.map((o) => o.value))}` : "";
+  const options = c.options?.length ? ` options=[${c.options.map((o) => quote(o.value)).join(",")}]` : "";
   const value = c.value && c.value !== c.label ? ` value=${quote(c.value)}` : "";
   return `[${c.id}] ${c.role} ${quote(c.label)}${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
 }
@@ -46,7 +51,7 @@ const foldLine = (run: Control[]) => `(${run.length} links: ${run.map((c) => `${
 function units(text: string): string[] {
   const out: string[] = [];
   let block: string[] | undefined;
-  for (const raw of text.split("\n")) {
+  for (const raw of text.split(/\r\n|[\r\n\u2028\u2029\u0085]/)) {
     if (block) {
       block.push(raw);
       if (CLOSE.test(raw)) { out.push(block.join("\n")); block = undefined; }
@@ -118,17 +123,20 @@ export function pageText(page: Snapshot, options: PageTextOptions = {}): string 
   const seen = new Set<string>();
   const text = units(page.text).filter((unit) => {
     if (wrapped(unit) || ALERT.test(unit)) return true;
+    if (!/[\p{L}\p{N}]/u.test(unit)) return false;
     if (shown.has(unit)) return false;
     if (unit.length > SHORT || /\d/.test(unit)) return true;
     if (seen.has(unit)) return false;
     seen.add(unit);
     return true;
   });
-  return [`Title: ${quote(page.title)}`, `Address: ${page.url}`, "Controls:", ...lines, "Text:", ...text].join("\n");
+  return [`Title: ${quote(page.title)}`, `Address: ${page.url}`, "Controls:", ...lines, "Text:", ...text.map(show)].join("\n");
 }
 
 /** When the frame's document loaded: the first item of readFrame's key. */
-const loaded = (key: string) => (JSON.parse(key) as unknown[])[0];
+const loaded = (key: string) => {
+  try { return (JSON.parse(key) as unknown[])[0]; } catch { return key; }
+};
 
 /** The same document in every frame: no navigation and no reload (D2). */
 function sameFrames(a: Snapshot, b: Snapshot): boolean {
@@ -181,7 +189,7 @@ export function changeText(before: Snapshot, after: Snapshot, options: ChangeOpt
   if (added.length) out.push("New:", ...added.map(line));
   if (gone.length) out.push("Gone:", ...gone.map(line));
   if (removed) out.push(`(${removed} lines of text went away.)`);
-  if (fresh.length) out.push("New text:", ...fresh);
+  if (fresh.length) out.push("New text:", ...fresh.map(show));
   if (!changed.length && !added.length && !gone.length && !fresh.length && !removed && after.title === before.title && after.captcha === before.captcha) {
     out.splice(1, 0, "Nothing on the page changed.");
   }
