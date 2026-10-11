@@ -17,6 +17,8 @@ const page = (controls: Control[]): Snapshot => ({
   frames: [{ frameId: 0, url: "http://fixture/checkout/pay", key: "k", documentId: "doc" }],
 });
 const options = { chooser: ruleChooser(), today: TODAY };
+const twin = (form: number) => ["Email", "Card number", "CVC"].map((l) => c(l, { form, action: "http://fixture/checkout/pay" }))
+  .concat(c("Pay", { form, role: "button", submit: true, action: "http://fixture/checkout/pay" }));
 const CARD = "email: sam@example.com, card number: 4242 4242 4242 4242, CVC: 123";
 
 describe("preview (C33)", () => {
@@ -42,11 +44,11 @@ describe("preview (C33)", () => {
   it("shows a choice, a checked box and a date in plain words", async () => {
     const to = { action: "http://fixture/book" };
     const controls = [c("Country", { ...to, tag: "select", role: "combobox", options: [{ value: "ca", label: "Canada", selected: false }, { value: "us", label: "United States", selected: true }] }),
-      c("Accept the terms", { ...to, role: "checkbox", type: "checkbox" }), c("Check-in date", { ...to, type: "date" }),
+      c("Accept the terms", { ...to, role: "checkbox", type: "checkbox" }), c("Check in", { ...to, type: "date" }),
       c("Book", { ...to, role: "button", submit: true })];
-    const plan = await preview(page(controls), "country: Canada, check-in date: 2026-10-02, accept the terms, book", options);
+    const plan = await preview(page(controls), "country: Canada, check in October 2, 2026, accept the terms, book", options);
     expect(plan.destination).toBe("http://fixture/book");
-    expect(plan.fields).toEqual([{ label: "Country", value: "Canada" }, { label: "Check-in date", value: "2026-10-02" }, { label: "Accept the terms", value: "checked" }]);
+    expect(plan.fields).toEqual([{ label: "Country", value: "Canada" }, { label: "Check in", value: "2026-10-02" }, { label: "Accept the terms", value: "checked" }]);
   });
 
   it("has no destination when the goal does not send", async () => {
@@ -55,8 +57,6 @@ describe("preview (C33)", () => {
   });
 
   it("has no destination and says why when the run would stop", async () => {
-    const twin = (form: number) => ["Email", "Card number", "CVC"].map((l) => c(l, { form, action: "http://fixture/checkout/pay" }))
-      .concat(c("Pay", { form, role: "button", submit: true, action: "http://fixture/checkout/pay" }));
     const plan = await preview(page([...twin(4), ...twin(5)]), `${CARD}, pay`, options);
     expect(plan.destination).toBeNull();
     expect(plan.blocked).toMatch(/^two forms fit the goal/);

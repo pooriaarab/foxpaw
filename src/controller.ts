@@ -105,7 +105,7 @@ const unsafe = (c: Control, goal: string) => !allowedBy(c.label, goal);
 /** A requirement that names a button to press: `click "Pay $40.00"` (C21). */
 const presses = (r: Requirement) => !!r.value && /^(?:then\s+)?(?:click|press|tap|hit)$/i.test(r.key.trim());
 /** A card number, CVC, IBAN, password and the like (C24). */
-const sensitive = (r: Requirement) => SENSITIVE.test(r.key) || /^(?:\d[ -]?){13,19}$/.test(r.value ?? "");
+export const sensitive = (r: Requirement) => SENSITIVE.test(r.key) || /^(?:\d[ -]?){13,19}$/.test(r.value ?? "");
 const blocked = (reason: string): Next => ({ kind: "blocked", reason });
 const originOf = (url = "") => (URL.canParse(url) ? new URL(url).origin : "null");
 /** In the top frame, or in a frame of the top page's origin (C27). */

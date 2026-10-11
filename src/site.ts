@@ -41,24 +41,29 @@ function hostIn(url: string, allowHosts: string[]): boolean {
 }
 
 /**
- * Why a form on `page` may not send to `to` (C22, C24), or null when it may.
+ * Why a form on `page` may not send to `to` (C22, C24, C32), or null when it may.
  * `to` is undefined outside a form (C29 decides). A sensitive value goes only
- * to an http or https action. An `allowHosts` entry with a "/" names an origin
- * and a path prefix that ends at a "/". A host entry allows another origin,
- * but not for a sensitive value, which stays in the page's folder or under its path.
+ * to an http or https action. An `allowHosts` URL entry (one with a "/") is a
+ * pin: with one, every send goes only to an action a URL entry names, by exact
+ * origin and path, or by path prefix when the entry ends with "/". A host entry
+ * allows another origin, but not for a sensitive value, which stays in the
+ * page's folder or under its path.
  */
 export function refuseDestination(page: string, to: string | undefined, allowHosts: string[], sensitive: boolean): string | null {
-  if (to === undefined) return null;
-  if (!/^https?:/i.test(to) || !URL.canParse(to)) return sensitive ? `the form sends a sensitive value to "${to}", which is not a web address` : null;
+  const pins = allowHosts.filter((a) => a.includes("/"));
+  if (to === undefined) return pins.length ? "fields outside a form send to an unknown place, not to the destination you approved" : null;
+  if (!/^https?:/i.test(to) || !URL.canParse(to)) {
+    return sensitive || pins.length ? `the form sends ${sensitive ? "a sensitive value " : ""}to "${to}", which is not a web address` : null;
+  }
   const [from, dest] = [new URL(page), new URL(to)];
   const names = (a: string) => {
-    const base = URL.canParse(a) ? new URL(a) : null;
-    const path = base?.pathname.replace(/\/$/, "");
-    return base?.origin === dest.origin && (dest.pathname === path || dest.pathname.startsWith(`${path}/`));
+    if (!URL.canParse(a)) return false;
+    const pin = new URL(a);
+    return pin.origin === dest.origin && (pin.pathname.endsWith("/") ? dest.pathname.startsWith(pin.pathname) : dest.pathname === pin.pathname);
   };
-  if (allowHosts.some((a) => a.includes("/") && names(a))) return null;
+  if (pins.length) return pins.some(names) ? null : `the form sends to ${dest.origin}${dest.pathname}, not to the destination you approved`;
   if (dest.origin !== from.origin) {
-    return !sensitive && hostIn(to, allowHosts.filter((a) => !a.includes("/"))) ? null : `the form sends to ${dest.host}, which is not the origin of this page`;
+    return !sensitive && hostIn(to, allowHosts) ? null : `the form sends to ${dest.host}, which is not the origin of this page`;
   }
   const dir = from.pathname.slice(0, from.pathname.lastIndexOf("/") + 1);
   const near = (dest.pathname.startsWith(dir) && !dest.pathname.slice(dir.length).includes("/")) || dest.pathname.startsWith(`${from.pathname}/`);

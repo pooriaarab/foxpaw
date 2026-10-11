@@ -109,6 +109,10 @@ flowchart LR
    `allowHosts` names its action URL (`"https://pay.example/charge"`). A
    value with no field waits for a later step only when no sensitive value
    goes in this send. Else the run stops with `blocked`.
+   An `allowHosts` URL entry is a pin: with one, every send goes only to an
+   action a URL entry names. The entry names the exact path; an entry that
+   ends with `/` also covers the paths under it. `preview` gives the
+   destination to pin, so a human can approve it first.
 8. `verify` checks each value, date and setting, checks that the run sent the
    form it filled, and checks that the page is not an error, empty or captcha
    page.
@@ -143,6 +147,7 @@ foxpaw is a library. It has no CLI and no MCP server.
 | Export | What it does |
 |---|---|
 | `runTask(tabId, goal, options?)` | Runs a goal on a tab and returns a `RunResult`: `status` (`done`, `blocked`, `stopped`, `error`), `verified`, `checks`, `steps`, `refusals`, `blockedReason`, `unmatched`, `totalMs`. Options: `chooser`, `maxSteps` (40), `today`, `group`, `onStep`, `signal`, `allowHosts`. |
+| `preview(snapshot, goal, options?)` | What `runTask` would do on this snapshot, without acting: `{ sends, destination, button, fields, blocked }`. `fields` holds the label and value of each field that gets one; a card number shows as `•••• 4242`, another sensitive value as `•••`. `destination` is the send's action URL, or null. Options: `chooser`, `today`, `allowHosts`. |
 | `snapshot(tabId)` | Reads every frame of the tab into a `Snapshot` of `Control` objects. |
 | `act(tabId, control, request, snapshot)` | Does one operation on one control: `click`, `type`, `select`, `check`, `uncheck`, `date`, `enter` or `scroll`. Returns `{ ok }`, or `{ ok: false, reason }` with `stale`, `gone`, `hidden`, `covered`, `disabled`, `readonly`, `unsupported` or `navigated`. |
 | `pageText(snapshot, options?)` | The page as text for a planner model: title, address, up to 40 controls and the visible text. Runs of short links (menus) fold into one line that names each link and its id. Submit buttons and fields are picked first, duplicate links go, and text that only repeats a shown label goes. Option: `maxControls` (40). |
