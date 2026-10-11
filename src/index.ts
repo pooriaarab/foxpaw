@@ -9,6 +9,7 @@ export { confirmSend, decide, record, start, FLOOR, type Next, type RunState, ty
 export { namesValue, nearlyNames } from "./match.js";
 export { problemOf, verify, type Check, type Verdict } from "./verify.js";
 export { runTask, type RunOptions, type RunResult } from "./run.js";
+export { preview, type FormPlan, type PlannedField, type PreviewOptions } from "./preview.js";
 export { groupTab, type TabGroupStatus } from "./tabgroup.js";
 export { glinerChooser, LABEL_CAP, type MindLike } from "./choosers/gliner.js";
 export { allowedBy, risky } from "./safety.js";
