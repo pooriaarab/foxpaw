@@ -127,9 +127,22 @@ try {
   const nowhere = await run("search.html", "search: tab groups");
   check("a send with no effect is not verified", { status: "blocked", reason: "the form did not send", verified: false },
     { status: nowhere.status, reason: nowhere.blockedReason, verified: nowhere.verified });
-  const away = await run("away.html", "email: sam@example.com, name: Sam Lee");
-  check("run stops on another site", { status: "blocked", reason: "the page moved to another site", host: "localhost", acted: ["Email", "Join"] },
-    { status: away.status, reason: away.blockedReason, host: new URL(away.url).hostname, acted: away.steps.map((s) => s.action) });
+  const away = await run("away.html", "email: sam@example.com");
+  check("run does not send a form that posts to another site", { status: "blocked", reason: `the form sends to localhost:${new URL(site.url).port}, which is not the origin of this page`, acted: [] },
+    { status: away.status, reason: away.blockedReason, acted: away.steps.map((s) => s.action) });
+  const lookalike = await run("lookalike.html", "full name: Sam Park, email: sam.park@example.com, card number: 4242 4242 4242 4242, expiry: 12/29, CVC: 123, pay");
+  const paid = new URL(lookalike.url);
+  check("run fills and sends only the form that fits the goal", { status: "done", page: "/thanks.html", card: "4242 4242 4242 4242", express: false },
+    { status: lookalike.status, page: paid.pathname, card: paid.searchParams.get("card"), express: lookalike.steps.some((s) => s.action === "Pay with Express") });
+  const twin = await run("twin.html", 'email: sam@example.com, card number: 4242 4242 4242 4242, then click "Pay $40.00"');
+  check("two forms that fit the same are not guessed", { status: "blocked", ambiguous: true, steps: 0 },
+    { status: twin.status, ambiguous: (twin.blockedReason ?? "").startsWith("two forms fit the goal"), steps: twin.steps.length });
+  for (const on of ["pointerdown", "submit"]) {
+    const shifted = await run(`moved.html?on=${on}`, "email: sam@example.com");
+    const left = (await fox.browser.pages()).some((p) => p.url().includes("attacker.test"));
+    check(`a send whose action changes on ${on} is refused`, { status: "blocked", reason: "the form's destination changed as foxpaw sent it", left: false },
+      { status: shifted.status, reason: shifted.blockedReason, left });
+  }
   const linked = await run("away.html", "open partner profile, name: Sam Lee");
   check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
     { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });
