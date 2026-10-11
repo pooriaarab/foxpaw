@@ -49,7 +49,8 @@ describe("refuseDestination (C24)", () => {
     ["https://shop.example/api/pay", [], true, true],
     ["https://pay.example.evil.com/steal", ["https://pay.example"], true, true],
     ["https://pay.example/charge-evil", ["https://pay.example/charge"], true, true],
-    ["https://pay.example/charge/v2", ["https://pay.example/charge"], true, false],
+    ["https://pay.example/charge/v2", ["https://pay.example/charge"], true, true],
+    ["https://pay.example/charge/v2", ["https://pay.example/charge/"], true, false],
     ["mailto:a@evil.example", [], true, true],
     ["javascript:alert(1)", [], true, true],
     ["", [], true, true],
@@ -57,5 +58,27 @@ describe("refuseDestination (C24)", () => {
     ["https://news.example/sub", ["news.example"], false, false],
   ])("%s with %j, sensitive %s: refused %s", (to, allow, sensitive, refused) => {
     expect(refuseDestination(P, to, allow as string[], sensitive) !== null).toBe(refused);
+  });
+});
+
+describe("an allowHosts URL entry pins the destination (C32)", () => {
+  const P = "https://shop.example/checkout/pay";
+  it.each([
+    ["https://shop.example/checkout/pay", false],
+    ["https://shop.example/checkout/pay?step=2#top", false],
+    ["https://shop.example/checkout/express", true],
+    ["https://shop.example/checkout/pay/", true],
+    ["https://shop.example/checkout/pay/x", true],
+    ["https://shop.example/thanks", true],
+    ["https://news.example/sub", true],
+    ["javascript:void(0)", true],
+  ])("%s: refused %s, sensitive or not", (to, refused) => {
+    for (const sensitive of [false, true]) {
+      expect(refuseDestination(P, to, ["news.example", "https://shop.example/checkout/pay"], sensitive) !== null).toBe(refused);
+    }
+  });
+  it("refuses a send whose destination is unknown", () => {
+    expect(refuseDestination(P, undefined, ["https://shop.example/checkout/pay"], false)).toMatch(/unknown/);
+    expect(refuseDestination(P, undefined, ["shop.example"], false)).toBeNull();
   });
 });

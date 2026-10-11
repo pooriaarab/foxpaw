@@ -312,6 +312,19 @@ describe("controller", () => {
       expect((await run("card number: 4242 4242 4242 4242", [c("Card number", { form: 11, action: "http://fixture/attacker.test/x" })])).acted).toEqual([]);
     });
 
+    it("sends only to the destination an allowHosts URL entry pins (C32)", async () => {
+      const at = { url: "http://fixture/checkout/pay" };
+      const pin = ["http://fixture/checkout/pay"];
+      const signup = (action: string) => [c("Email", { form: 16, action }), c("Sign up", { role: "button", submit: true, form: 16, action })];
+      expect((await run("email: a@b.co", signup("http://fixture/checkout/pay"), at, pin)).end).toBe("sent: Sign up");
+      // A sibling path is fine without a pin (C24), and refused with one, sensitive or not.
+      expect((await run("email: a@b.co", signup("http://fixture/checkout/express"), at)).end).toBe("sent: Sign up");
+      expect((await run("email: a@b.co", signup("http://fixture/checkout/express"), at, pin)).end).toMatch(/^blocked: the form sends to http:\/\/fixture\/checkout\/express, not to the destination you approved/);
+      // Fields outside a form send to an unknown place: the pin refuses them, even with the named button.
+      const out = await run('email: a@b.co, then click "Submit"', [c("Email", { form: undefined }), c("Submit", { role: "button", form: undefined })], at, pin);
+      expect(out.end).toMatch(/^blocked: .*unknown/);
+    });
+
     it("does not send when the destination changed since the first read, or as it sent (C25)", async () => {
       const moved = { action: "http://fixture/attacker.test/steal", firstAction: "http://fixture/signup" } as Partial<Control>;
       const out = await run("email: a@b.co", [c("Email", { form: 7, ...moved }), c("Sign up", { role: "button", submit: true, form: 7, ...moved })]);
