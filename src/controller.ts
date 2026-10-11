@@ -23,7 +23,7 @@ const SEND = /^(submit|send|search|go|continue|next|sign up|register|book|save|a
 const TYPABLE = new Set(["textbox", "searchbox", "spinbutton"]);
 /** A send button that leads to a further step (C28). */
 const STEP = /^(?:continue|next|proceed)\b/i;
-const SENSITIVE = /\b(?:card|cc|cvc|cvv|csc|security\s+code|expir\w*|iban|account\s+number|routing|password|passcode|pin|ssn)\b/i;
+const SENSITIVE = /\b(?:card|cc|cvc2?|cvv2?|csc|security\s+code|expir\w*|iban|account\s+number|routing|sort\s+code|password|passcode|pin|ssn|social\s+security|tax\s+id)\b/i;
 
 type Effect = "done" | "list" | "option" | "open-picker" | "page-picker" | "day" | "send";
 

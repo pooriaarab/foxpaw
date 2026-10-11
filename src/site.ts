@@ -42,13 +42,21 @@ function hostIn(url: string, allowHosts: string[]): boolean {
 
 /**
  * Why a form on `page` may not send to `to` (C22, C24), or null when it may.
- * Only http and https actions count. An `allowHosts` entry with a "/" names
- * action URLs by prefix. A host entry allows another origin, but not for a
- * sensitive value, which stays in the page's directory or under its path.
+ * `to` is undefined outside a form (C29 decides). A sensitive value goes only
+ * to an http or https action. An `allowHosts` entry with a "/" names an origin
+ * and a path prefix that ends at a "/". A host entry allows another origin,
+ * but not for a sensitive value, which stays in the page's folder or under its path.
  */
 export function refuseDestination(page: string, to: string | undefined, allowHosts: string[], sensitive: boolean): string | null {
-  if (!to || !/^https?:/i.test(to) || allowHosts.some((a) => a.includes("/") && to.startsWith(a))) return null;
+  if (to === undefined) return null;
+  if (!/^https?:/i.test(to) || !URL.canParse(to)) return sensitive ? `the form sends a sensitive value to "${to}", which is not a web address` : null;
   const [from, dest] = [new URL(page), new URL(to)];
+  const names = (a: string) => {
+    const base = URL.canParse(a) ? new URL(a) : null;
+    const path = base?.pathname.replace(/\/$/, "");
+    return base?.origin === dest.origin && (dest.pathname === path || dest.pathname.startsWith(`${path}/`));
+  };
+  if (allowHosts.some((a) => a.includes("/") && names(a))) return null;
   if (dest.origin !== from.origin) {
     return !sensitive && hostIn(to, allowHosts.filter((a) => !a.includes("/"))) ? null : `the form sends to ${dest.host}, which is not the origin of this page`;
   }

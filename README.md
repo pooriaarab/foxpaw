@@ -213,7 +213,10 @@ The controller does not act on a score below 0.4.
   it can count as one site.
 - Destination checks (C22 to C29) are defence in depth, not a boundary. Page
   script can read a field as foxpaw types, or send it with `fetch`. The
-  boundary is the approval that names where the data goes.
+  boundary is the approval that names where the data goes. The
+  `window.stop()` fallback for a moved action is not proven against every race.
+- Card fields in a cross-origin frame (Stripe Elements, Adyen, Braintree)
+  block by design: foxpaw types no goal value there (C27), so C20 stops the send.
 - foxpaw does not solve captchas. It stops with `blocked: "captcha"`.
 - The demo extension bundles no model, so its GLiNER2 option is off.
 - E2E tests cover local fixture pages only, not live sites.
