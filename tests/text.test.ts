@@ -62,35 +62,22 @@ describe("pageText on real pages", () => {
     expect(text).toContain('[0:60] link "100% Merino Wool Half Zip Up Hoodie for Women Base Layer Top"');
     expect(text).not.toContain('"Kindle Books"');
     expect(text).toMatch(/\(\d+ links: Music, .*ids 0:23 to 0:5\d\)/);
-    expect(untrimmed(amazon)).not.toContain("Merino Wool Half Zip");
+    expect(controlLines(untrimmed(amazon)).join("\n")).not.toContain("Merino Wool Half Zip");
   });
 
-  it("T1: every real page gets shorter", () => {
+  it("T1, T3: every real page gets shorter, and names only real ids", () => {
     for (const name of ["amazon-search", "hacker-news", "wikipedia-firefox", "github-repo", "signup", "mail-after-send"]) {
       const snap = load(name);
-      expect(pageText(snap).length, name).toBeLessThan(untrimmed(snap).length);
-    }
-  });
-
-  it("T3: every id in the text is a control of the snapshot", () => {
-    for (const name of ["amazon-search", "hacker-news", "wikipedia-firefox", "github-repo"]) {
-      const snap = load(name);
       const real = new Set(snap.controls.map((c) => c.id));
+      expect(pageText(snap).length, name).toBeLessThan(untrimmed(snap).length);
       for (const id of ids(pageText(snap))) expect(real.has(id), `${name} ${id}`).toBe(true);
     }
   });
 
-  it("T4: Hacker News stories do not fold as a menu", () => {
+  it("T4, T5: Hacker News stories do not fold, and each upvote link stays", () => {
     const text = pageText(load("hacker-news"));
-    expect(text).toContain('[0:12] link "2D Vehicles"');
-    expect(text).toContain('[0:14] link "Michelangelo11"');
+    for (const line of ['[0:11] link "upvote"', '[0:12] link "2D Vehicles"', '[0:14] link "Michelangelo11"', '[0:18] link "upvote"']) expect(text).toContain(line);
     expect(text).not.toMatch(/ids 0:1[1-7] to/);
-  });
-
-  it("T5: links that share a label but go to different places are kept", () => {
-    const text = pageText(load("hacker-news"));
-    expect(text).toContain('[0:11] link "upvote"');
-    expect(text).toContain('[0:18] link "upvote"');
   });
 
   it("T5: a duplicate link with the same href is dropped", () => {
@@ -99,8 +86,7 @@ describe("pageText on real pages", () => {
   });
 
   it("keeps a signup form whole", () => {
-    const text = pageText(load("signup"));
-    for (const id of ["0:4", "0:6", "0:7", "0:8", "0:12", "0:14", "0:16"]) expect(text).toContain(`[${id}]`);
+    for (const id of ["0:4", "0:6", "0:7", "0:8", "0:12", "0:14", "0:16"]) expect(pageText(load("signup"))).toContain(`[${id}]`);
   });
 });
 
@@ -124,16 +110,10 @@ describe("pageText budget and text", () => {
     expect(text).toContain("... 12 more controls");
   });
 
-  it("T6: text that names a control outside the cut stays", () => {
+  it("T6: text naming a control outside the cut stays; repeated errors stay, repeated noise goes", () => {
     const content = Array.from({ length: 50 }, (_, i) => control(i + 1, "button", `Product ${i + 1}`));
-    const text = pageText(page(content, "Product 1\nProduct 50\nPrice 5"));
-    const body = text.slice(text.indexOf("\nText:\n") + 7);
-    expect(body.split("\n")).toEqual(["Product 50", "Price 5"]);
-  });
-
-  it("T6: repeated errors stay, repeated noise goes", () => {
-    const text = pageText(page([control(1, "textbox", "Email")], "Email\nThis field is required\nAdd to cart\nThis field is required\nAdd to cart"));
-    expect(text.slice(text.indexOf("\nText:\n") + 7).split("\n")).toEqual(["This field is required", "Add to cart", "This field is required"]);
+    const text = pageText(page(content, "Product 1\nProduct 50\nThis field is required\nAdd to cart\nThis field is required\nAdd to cart"));
+    expect(text.slice(text.indexOf("\nText:\n") + 7).split("\n")).toEqual(["Product 50", "This field is required", "Add to cart", "This field is required"]);
   });
 
   it("T7: a wrapped block stays whole, even when it repeats", () => {
@@ -148,10 +128,11 @@ describe("pageText budget and text", () => {
   });
 });
 
+const edit = (snap: Snapshot, id: string, change: Partial<Control>): Snapshot =>
+  ({ ...snap, controls: snap.controls.map((c) => (c.id === id ? { ...c, ...change } : c)) });
+
 describe("changeText", () => {
   const before = load("signup");
-  const edit = (snap: Snapshot, id: string, change: Partial<Control>): Snapshot =>
-    ({ ...snap, controls: snap.controls.map((c) => (c.id === id ? { ...c, ...change } : c)) });
 
   it("D1: a typed value and a new error message make a short diff", () => {
     const after = { ...edit(before, "0:6", { value: "sam@example" }), text: `${before.text}\nEnter a valid email address.` };
@@ -174,15 +155,12 @@ describe("changeText", () => {
     expect(changeText(before, reloaded).full).toBe(true);
   });
 
-  it("D3: a re-mounted control shows as gone and new", () => {
+  it("D3: a re-mounted control shows as gone and new; new ids for most give the whole page", () => {
     const remounted = { ...before, controls: before.controls.map((c) => (c.id === "0:16" ? { ...c, id: "0:40", node: 40, disabled: true } : c)) };
     const change = changeText(before, remounted);
     expect(change.full).toBe(false);
     expect(change.text).toContain('Gone:\n[0:16] button "Create account"');
     expect(change.text).toContain('New:\n[0:40] button "Create account" (disabled, sends the form)');
-  });
-
-  it("D3: new ids for most controls give the whole page", () => {
     const renumbered = { ...before, controls: before.controls.map((c) => ({ ...c, id: `0:${c.node + 100}`, node: c.node + 100 })) };
     expect(changeText(before, renumbered).full).toBe(true);
   });

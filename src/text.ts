@@ -1,0 +1,192 @@
+// The page as text for a planner model, and what an action changed. Each
+// token costs a local planner time, so the text leaves out what a planner
+// does not need. Every string here comes from the page: a caller passes all
+// of it as untrusted data, inside its data fence. This file reads no page;
+// it formats Snapshots (docs/failure-modes.md T1-T7, D1-D5).
+import type { Control, Snapshot } from "./types.js";
+
+export interface PageTextOptions {
+  /** The most control lines (a folded run counts as one). Default: 40. */
+  maxControls?: number;
+  /** Fold runs of short links, such as menus, into one line. Default: true. */
+  fold?: boolean;
+}
+
+export interface ChangeOptions extends PageTextOptions {
+  /** The id of the control the action used. Its line is always in the diff. */
+  target?: string;
+}
+
+/** What `changeText` returns. `full` is true when `text` is the whole page, not a diff. */
+export interface Change { full: boolean; text: string }
+
+// A run of FOLD_RUN short links folds. SHORT is the most characters of a short
+// label or text line. A diff holds at most DIFF_TEXT characters of new text (D1).
+const MAX_CONTROLS = 40, FOLD_RUN = 5, SHORT = 40, DIFF_TEXT = 1200;
+const FIELDS = new Set(["textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "spinbutton"]);
+/** Text that reads as an error or an alert is never deduped or dropped (T6). */
+const ALERT = /\b(?:error|errors|invalid|required|must|incorrect|wrong|failed|denied|declined|not valid|please|warning|alert)\b/i;
+/** The wrapper that a scanner such as foxshield puts around flagged page text (T7). */
+const OPEN = /^\s*<untrusted-data[\s>]/, CLOSE = /^\s*<\/untrusted-data>\s*$/;
+
+type Item = { control: Control } | { fold: Control[] };
+
+/** One control as one line, for example `[0:6] textbox "Email" value="sam@example.com" (required)`. */
+function line(c: Control): string {
+  const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", c.expanded && "expanded",
+    c.submit && "sends the form"].filter(Boolean);
+  const options = c.options?.length ? ` options=${JSON.stringify(c.options.map((o) => o.value))}` : "";
+  const value = c.value && c.value !== c.label ? ` value="${c.value}"` : "";
+  return `[${c.id}] ${c.role} "${c.label}"${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
+}
+
+function foldLine(run: Control[]): string {
+  const names = run.slice(0, 4).map((c) => c.label).join(", ");
+  const more = run.length > 4 ? `, +${run.length - 4} more` : "";
+  return `(${run.length} links: ${names}${more}; ids ${run[0]!.id} to ${run.at(-1)!.id})`;
+}
+
+/**
+ * The page text split into units: one trimmed line, or one whole wrapped
+ * block from its opening line to its closing line. A block that never closes
+ * runs to the end. A unit with a line break is a wrapped block.
+ */
+function units(text: string): string[] {
+  const out: string[] = [];
+  let block: string[] | undefined;
+  for (const raw of text.split("\n")) {
+    if (block) {
+      block.push(raw);
+      if (CLOSE.test(raw)) { out.push(block.join("\n")); block = undefined; }
+    } else if (OPEN.test(raw)) block = [raw];
+    else if (raw.trim()) out.push(raw.trim());
+  }
+  if (block) out.push(block.join("\n"));
+  return out;
+}
+const wrapped = (unit: string) => unit.includes("\n") || OPEN.test(unit);
+
+/** The controls in page order, duplicate links left out, and runs of short links folded. */
+function items(page: Snapshot, fold: boolean): Item[] {
+  const out: Item[] = [];
+  const seen = new Set<string>();
+  let run: Control[] = [];
+  const flush = () => {
+    if (run.length >= FOLD_RUN) out.push({ fold: run });
+    else for (const c of run) out.push({ control: c });
+    run = [];
+  };
+  for (const c of page.controls) {
+    if (c.role === "link" && c.href) {
+      const key = JSON.stringify([c.frameId, c.label, c.href]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    if (!fold || c.role !== "link" || c.form !== undefined || c.dialog || c.label.length > SHORT) {
+      flush();
+      out.push({ control: c });
+      continue;
+    }
+    const last = run.at(-1);
+    // Links that share a row are one row of content, not a menu (T4).
+    if (last && ((c.row && c.row === last.row) || c.section !== last.section || c.frameId !== last.frameId)) flush();
+    run.push(c);
+  }
+  flush();
+  return out;
+}
+
+/** Fields, submit buttons and open dialogs first; then what is on screen; then folds; then the rest (T1, T2). */
+function rank(item: Item): number {
+  if ("fold" in item) return 2;
+  const c = item.control;
+  if (FIELDS.has(c.role) || c.submit || c.dialog) return 0;
+  return c.offscreen ? 3 : 1;
+}
+
+/**
+ * The page as text for a planner: the title, the address, up to 40 control
+ * lines and the visible text. Menus fold to one line, duplicate links go,
+ * and text lines that only repeat a shown label go. The kept control lines
+ * stay in page order. Every control stays in the snapshot, so a folded id
+ * still works for `act`.
+ */
+export function pageText(page: Snapshot, options: PageTextOptions = {}): string {
+  const max = options.maxControls ?? MAX_CONTROLS;
+  const all = items(page, options.fold ?? true);
+  const picked = new Set(all.map((item, i) => [item, i] as const)
+    .toSorted((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).slice(0, max).map(([item]) => item));
+  const kept = all.filter((item) => picked.has(item));
+  const left = all.filter((item) => !picked.has(item)).reduce((n, item) => n + ("fold" in item ? item.fold.length : 1), 0);
+  const lines = kept.map((item) => ("fold" in item ? foldLine(item.fold) : line(item.control)));
+  if (left > 0) lines.push(`... ${left} more controls`);
+
+  const shown = new Set(kept.flatMap((item) => ("fold" in item ? item.fold : [item.control])).map((c) => c.label.trim()).filter(Boolean));
+  const seen = new Set<string>();
+  const text = units(page.text).filter((unit) => {
+    if (wrapped(unit) || ALERT.test(unit)) return true;
+    if (shown.has(unit)) return false;
+    if (unit.length > SHORT) return true;
+    if (seen.has(unit)) return false;
+    seen.add(unit);
+    return true;
+  });
+  return [`Title: ${page.title}`, `Address: ${page.url}`, "Controls:", ...lines, "Text:", ...text].join("\n");
+}
+
+/** The same document in every frame: no navigation and no reload (D2). */
+function sameFrames(a: Snapshot, b: Snapshot): boolean {
+  if (a.url !== b.url || a.frames.length !== b.frames.length) return false;
+  return a.frames.every((f, i) => {
+    const g = b.frames[i];
+    return !!g && g.frameId === f.frameId && g.url === f.url && g.documentId === f.documentId;
+  });
+}
+
+const state = (c: Control) => JSON.stringify([line(c), c.readOnly]);
+
+/**
+ * What changed from `before` to `after`, the snapshots read before and after
+ * one action. On the same document it gives a short diff: the controls that
+ * changed, appeared or went away, a new title, and every new text line. When
+ * the page navigated or most of it changed, it gives `pageText(after)` with
+ * `full: true`. Values come from `after` as they are, so a password stays
+ * "•••" or as the caller redacted it.
+ */
+export function changeText(before: Snapshot, after: Snapshot, options: ChangeOptions = {}): Change {
+  const whole: Change = { full: true, text: pageText(after, options) };
+  if (!sameFrames(before, after)) return whole;
+  const max = options.maxControls ?? MAX_CONTROLS;
+  const old = new Map(before.controls.map((c) => [c.id, c]));
+  const now = new Set(after.controls.map((c) => c.id));
+  const gone = before.controls.filter((c) => !now.has(c.id));
+  const added = after.controls.filter((c) => !old.has(c.id));
+  const changed = after.controls.filter((c) => old.has(c.id) && state(old.get(c.id)!) !== state(c));
+  const total = new Set([...old.keys(), ...now]).size;
+  if (gone.length + added.length + changed.length > total / 2 || Math.max(gone.length, added.length, changed.length) > max) return whole;
+
+  const was = new Map<string, number>();
+  for (const unit of units(before.text)) was.set(unit, (was.get(unit) ?? 0) + 1);
+  const fresh = units(after.text).filter((unit) => {
+    const n = was.get(unit) ?? 0;
+    if (n > 0) was.set(unit, n - 1);
+    return n === 0;
+  });
+  const freshLength = fresh.join("\n").length;
+  if (freshLength > DIFF_TEXT || freshLength > after.text.length / 2) return whole;
+  const removed = [...was.values()].reduce((sum, n) => sum + n, 0);
+
+  const out = [`The page did not navigate: ${after.url}`];
+  if (after.title !== before.title) out.push(`New title: ${after.title}`);
+  const target = after.controls.find((c) => c.id === options.target);
+  if (target && !changed.includes(target) && !added.includes(target)) out.push("Acted on:", line(target));
+  if (changed.length) out.push("Changed:", ...changed.map(line));
+  if (added.length) out.push("New:", ...added.map(line));
+  if (gone.length) out.push("Gone:", ...gone.map(line));
+  if (removed) out.push(`(${removed} lines of text went away.)`);
+  if (fresh.length) out.push("New text:", ...fresh);
+  if (!changed.length && !added.length && !gone.length && !fresh.length && !removed && after.title === before.title) {
+    out.splice(1, 0, "Nothing on the page changed.");
+  }
+  return { full: false, text: out.join("\n") };
+}
