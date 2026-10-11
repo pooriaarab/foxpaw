@@ -137,6 +137,8 @@ foxpaw is a library. It has no CLI and no MCP server.
 | `runTask(tabId, goal, options?)` | Runs a goal on a tab and returns a `RunResult`: `status` (`done`, `blocked`, `stopped`, `error`), `verified`, `checks`, `steps`, `refusals`, `blockedReason`, `unmatched`, `totalMs`. Options: `chooser`, `maxSteps` (40), `today`, `group`, `onStep`, `signal`, `allowHosts`. |
 | `snapshot(tabId)` | Reads every frame of the tab into a `Snapshot` of `Control` objects. |
 | `act(tabId, control, request, snapshot)` | Does one operation on one control: `click`, `type`, `select`, `check`, `uncheck`, `date`, `enter` or `scroll`. Returns `{ ok }`, or `{ ok: false, reason }` with `stale`, `gone`, `hidden`, `covered`, `disabled`, `readonly`, `unsupported` or `navigated`. |
+| `pageText(snapshot, options?)` | The page as text for a planner model: title, address, up to 40 controls and the visible text. Runs of short links (menus) fold into one line that names each link and its id. Submit buttons and fields are picked first, duplicate links go, and text that only repeats a shown label goes. Option: `maxControls` (40). |
+| `changeText(before, after, options?)` | What one action changed, as `{ full, text }`. On the same document, `text` is a short diff: changed, new and gone controls, a new title, and every new text line. After a navigation, or when over half the controls changed, it is `pageText(after)` and `full` is `true`. Option `target`: the id of the control the action used, always listed. |
 | `settle(tabId, options?)` | Waits for a quiet page. With `listFor`, it first waits for a field's suggestion list. |
 | `verify(page, state, sentFrom?)` | Builds the result checklist. `problemOf(page)` names an error, empty or captcha page. |
 | `parseGoal(goal)` | Splits a goal into requirements. |
@@ -147,6 +149,10 @@ foxpaw is a library. It has no CLI and no MCP server.
 | `groupTab(tabId)` | Puts the tab in a "foxpaw" tab group. `runTask` does this with `group: true`. |
 | `resolveDate`, `formatDate`, `readDate` | Date rules. They read English, French, German and Spanish month names and field formats such as `DD/MM/YYYY`. |
 | `namesValue`, `nearlyNames` | Literal value matching. `nearlyNames` forgives small typos. |
+
+`pageText` and `changeText` return text from the page, folded lines included.
+Pass all of it to a model as untrusted data, inside your data fence. Text that
+a scanner wrapped in `<untrusted-data>` stays whole.
 
 A `Chooser` has two methods:
 
