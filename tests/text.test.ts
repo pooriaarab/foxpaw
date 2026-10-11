@@ -159,6 +159,23 @@ describe("pageText budget and text", () => {
     expect(pageText(page([control(1, "textbox", "1234", { secret: true, value: "1234" })]))).toContain('"1234" value="•••"');
   });
 
+  it("T11: checkbox and radio lines leave out the form value, and keep the label and the state", () => {
+    const text = pageText(page([control(1, "checkbox", "Select: Q4 budget", { value: "m1", checked: true }), control(2, "radio", "One way", { value: "oneway" }), control(3, "combobox", "Size", { value: "M" })]));
+    expect(controlLines(text)).toEqual(['[0:1] checkbox "Select: Q4 budget" (checked)', '[0:2] radio "One way"', '[0:3] combobox "Size" value="M"']);
+  });
+
+  it("T12: a long text line that a shown value holds goes; a short one and an alert stay", () => {
+    const quote = "--- Dana Lee wrote on 2026-10-07 --- Hi Sam, the Q4 budget is final.";
+    const text = pageText(page([control(1, "textbox", "Message", { value: `Thanks!\n${quote}` }), control(2, "textbox", "To", { value: "Error: required" })], `Reply\n${quote}\nThanks!\nError: required`));
+    expect(text.slice(text.indexOf("\nText:\n") + 7).split("\n")).toEqual(["| Reply", "| Thanks!", "| Error: required"]);
+  });
+
+  it("T13: a line that only runs shown labels together goes", () => {
+    const nav = ["Inbox", "Archive", "Sent", "Compose"].map((l, i) => control(i + 1, "link", l));
+    const text = pageText(page(nav, "InboxArchiveSentCompose\nInbox Archive\nInbox zero\nReplyForward"));
+    expect(text.slice(text.indexOf("\nText:\n") + 7).split("\n")).toEqual(["| Inbox zero", "| ReplyForward"]);
+  });
+
   it("T6: a repeated line with a number, such as a price, stays", () => {
     expect(pageText(page([], "$19.99\nAdd to cart\n$19.99\nAdd to cart"))).toMatch(/Text:\n\| \$19\.99\n\| Add to cart\n\| \$19\.99$/);
   });
