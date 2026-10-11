@@ -28,6 +28,23 @@ export async function perform(node: number, request: ActRequest, expect: { guard
     return { ok: true };
   }
 
+  const up = (n: Element) => n.parentElement || (n.parentNode as ShadowRoot | null)?.host || null;
+  // Only click and Enter may send a form or open a page: they carry the
+  // approval. Every other op fills, so it refuses a control that sends (C34).
+  const fills = op !== "click" && op !== "enter";
+  const here = location.href.split("#")[0];
+  const sends = (start: Element | null) => {
+    for (let n = start; n; n = up(n)) {
+      if (n instanceof HTMLButtonElement && n.type === "submit" && n.form) return true;
+      if (n instanceof HTMLInputElement && (n.type === "submit" || n.type === "image") && n.form) return true;
+      if ((n instanceof HTMLAnchorElement || n instanceof HTMLAreaElement) && n.hasAttribute("href") &&
+        n.protocol !== "javascript:" && n.href.split("#")[0] !== here) return true;
+    }
+    return false;
+  };
+  const sendsRefused: ActResult = { ok: false, reason: "submit", detail: "this control sends a form or opens a page: use click, which asks for approval" };
+  if (fills && sends(e)) return sendsRefused;
+
   // The hit-test is at the centre, so the centre must be on the screen (P13).
   const r0 = e.getBoundingClientRect();
   const cx = r0.x + r0.width / 2, cy = r0.y + r0.height / 2;
@@ -44,13 +61,14 @@ export async function perform(node: number, request: ActRequest, expect: { guard
     if (!inner || inner === hit) break;
     hit = inner;
   }
-  const up = (n: Element) => n.parentElement || (n.parentNode as ShadowRoot | null)?.host || null;
   let inside = false;
   for (let n: Element | null = hit; n; n = up(n)) if (n === e) inside = true;
   // A label that wraps a checkbox counts as the checkbox.
   if (!inside && !(hit && hit.closest("label") && (hit.closest("label") as HTMLLabelElement).control === e)) {
     return { ok: false, reason: "covered", detail: hit ? `${hit.tagName.toLowerCase()} is on top` : "nothing at its centre" };
   }
+  // The click goes to the element at the centre: a link inside an option sends too.
+  if (fills && sends(hit)) return sendsRefused;
 
   if (request.mark !== false) {
     const ring = document.createElement("div");
@@ -71,7 +89,14 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   const refused: ActResult = { ok: false, reason: "destination", detail: "the form's destination changed as foxpaw sent it" };
   let submitted = false;
   let changed = false;
+  let blocked = false;
   const onSubmit = (event: Event) => {
+    // A page script that sends the form on a fill's click (C34).
+    if (fills) {
+      blocked = true;
+      event.preventDefault();
+      return;
+    }
     submitted = true;
     if (!moved()) return;
     changed = true;
@@ -125,7 +150,10 @@ export async function perform(node: number, request: ActRequest, expect: { guard
 
     if (op === "click") {
       if (!click()) return refused;
-    } else if (op === "type") return { ok: true, value: typeText(value) };
+    } else if (op === "type") {
+      const typed = typeText(value);
+      return blocked ? sendsRefused : { ok: true, value: typed };
+    }
     else if (op === "date") {
       if (input.type !== "date") {
         // A person closes the calendar the field opened: Escape, then a press outside (P16).
@@ -139,7 +167,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
           e.dispatchEvent(new KeyboardEvent("keyup", key));
         }
         if (opened().length) press(document.body, 1, 1, false);
-        return { ok: true, value: typed };
+        return blocked ? sendsRefused : { ok: true, value: typed };
       }
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, value);
       e.dispatchEvent(new Event("input", { bubbles: true }));
@@ -176,9 +204,11 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       }
       if (fits.length !== 1) return { ok: false, reason: "unsupported", detail: `${fits.length} suggestions hold the value` };
       const o = fits[0]!;
+      if (sends(o)) return sendsRefused;
       o.scrollIntoView({ block: "nearest" });
       const ro = o.getBoundingClientRect();
       if (!press(o, ro.x + ro.width / 2, ro.y + ro.height / 2)) return refused;
+      if (blocked) return sendsRefused;
       return { ok: true, value: (e as HTMLInputElement).value };
     } else if (op === "select") {
       const select = e as unknown as HTMLSelectElement;
@@ -190,6 +220,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       const on = () => (input.type === "checkbox" || input.type === "radio" ? input.checked : e.getAttribute("aria-checked") === "true" ||
         e.getAttribute("aria-pressed") === "true" || e.getAttribute("aria-selected") === "true");
       if (on() !== (op === "check")) click();
+      if (blocked) return sendsRefused;
       if (on() !== (op === "check")) return { ok: false, reason: "unsupported", detail: "the state did not change" };
     } else if (op === "enter") {
       // Enter would press the form's first submit button. A hidden one is not
@@ -211,6 +242,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       }
       e.dispatchEvent(new KeyboardEvent("keyup", init));
     }
+    if (blocked) return sendsRefused;
     // Last resort: a script that ran after both checks. Stop the navigation.
     if (changed || moved()) {
       stop();
