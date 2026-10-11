@@ -22,12 +22,16 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   const { op, value = "" } = request;
   if ((op === "type" || op === "date") && (input.readOnly || e.getAttribute("aria-readonly") === "true")) return { ok: false, reason: "readonly" };
   if (op === "scroll") {
-    scrollBy({ top: Number(value) || 560, behavior: "instant" });
+    // A number scrolls the page; no value brings the control into view (P17).
+    if (value.trim() && Number.isFinite(Number(value))) scrollBy({ top: Number(value), behavior: "instant" });
+    else e.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
     return { ok: true };
   }
 
+  // The hit-test is at the centre, so the centre must be on the screen (P13).
   const r0 = e.getBoundingClientRect();
-  if (r0.bottom < 0 || r0.right < 0 || r0.top >= innerHeight || r0.left >= innerWidth) {
+  const cx = r0.x + r0.width / 2, cy = r0.y + r0.height / 2;
+  if (cx < 0 || cy < 0 || cx >= innerWidth || cy >= innerHeight) {
     e.scrollIntoView({ block: "center", inline: "center" });
     await new Promise((done) => setTimeout(done, 50));
   }
@@ -59,7 +63,11 @@ export async function perform(node: number, request: ActRequest, expect: { guard
 
   // A page script can move the form's destination as the send happens (C25):
   // read it again before the click or Enter, and on submit, first and last.
-  const moved = () => expect.to !== undefined && cache.to(e) !== expect.to;
+  // A click can redraw the control itself (a calendar's "Next month"). A
+  // control that left the page sends nothing, so its form's destination is
+  // read from the form it was in (P14).
+  const form0 = input.form || e.closest("form");
+  const moved = () => expect.to !== undefined && cache.to(e.isConnected || !form0 ? e : form0) !== expect.to;
   const refused: ActResult = { ok: false, reason: "destination", detail: "the form's destination changed as foxpaw sent it" };
   let submitted = false;
   let changed = false;
@@ -72,22 +80,27 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   addEventListener("submit", onSubmit, true);
   addEventListener("submit", onSubmit);
   try {
-    const click = () => {
-      const mouse = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0, detail: 1 };
+    // A press at a point: pointer and mouse down and up, then a click unless `withClick` is false.
+    const press = (at: Element, px: number, py: number, withClick = true) => {
+      const mouse = { bubbles: true, cancelable: true, composed: true, view: window, clientX: px, clientY: py, button: 0, detail: 1 };
       const pointer = { ...mouse, pointerId: 1, pointerType: "mouse", isPrimary: true };
-      const at = hit ?? e;
       const fire = (type: string, buttons: number) =>
         at.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...pointer, buttons }) : new MouseEvent(type, { ...mouse, buttons }));
       fire("pointerover", 0); fire("mouseover", 0); fire("pointermove", 0); fire("mousemove", 0);
       // A cancelled pointerdown suppresses the mouse events after it, not the click.
       const mouseEvents = fire("pointerdown", 1);
-      if (mouseEvents && fire("mousedown", 1)) e.focus({ preventScroll: true });
+      if (mouseEvents && fire("mousedown", 1) && at === (hit ?? e)) e.focus({ preventScroll: true });
       fire("pointerup", 0);
       if (mouseEvents) fire("mouseup", 0);
       if (moved()) return false;
-      fire("click", 0);
+      if (withClick) fire("click", 0);
       return true;
     };
+    const click = () => press(hit ?? e, x, y);
+    const shownNow = (n: Element) => n.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+    // The popups on the page that a field can open: a calendar, a suggestion list, a menu.
+    const popups = () => [...document.querySelectorAll('dialog[open],[role="dialog"],[role="grid"],[role="listbox"],[role="menu"]')]
+      .filter((p) => !p.contains(e) && shownNow(p));
     // Replace the text like typing does. insertText fires beforeinput and
     // input, which React and editors listen for. When it does nothing, the
     // native setter goes past React's value tracker, and input still fires.
@@ -114,11 +127,49 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       if (!click()) return refused;
     } else if (op === "type") return { ok: true, value: typeText(value) };
     else if (op === "date") {
-      if (input.type !== "date") return { ok: true, value: typeText(value) };
+      if (input.type !== "date") {
+        // A person closes the calendar the field opened: Escape, then a press outside (P16).
+        const before = new Set(popups());
+        const typed = typeText(value);
+        await new Promise((done) => setTimeout(done, 100));
+        const opened = () => popups().filter((p) => !before.has(p));
+        if (opened().length) {
+          const key = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true };
+          e.dispatchEvent(new KeyboardEvent("keydown", key));
+          e.dispatchEvent(new KeyboardEvent("keyup", key));
+        }
+        if (opened().length) press(document.body, 1, 1, false);
+        return { ok: true, value: typed };
+      }
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, value);
       e.dispatchEvent(new Event("input", { bubbles: true }));
       e.dispatchEvent(new Event("change", { bubbles: true }));
       return { ok: input.value === value, value: input.value };
+    } else if (op === "select" && /^(option|menuitem|gridcell)$/.test(e.getAttribute("role") || "")) {
+      if (!click()) return refused;
+    } else if (op === "select" && e.tagName !== "SELECT" && (e.getAttribute("role") === "combobox" || e.getAttribute("aria-autocomplete") === "list") &&
+      (e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement)) {
+      // An autocomplete field: type the value, then pick the one suggestion that holds it (P15).
+      typeText(value);
+      const want = value.trim().toLowerCase();
+      const owner = e.parentElement?.closest('[role="combobox"]');
+      const ids = [...new Set([e, owner].filter((n): n is Element => !!n).flatMap((n) => `${n.getAttribute("aria-controls") || ""} ${n.getAttribute("aria-owns") || ""}`.trim().split(/\s+/)).filter(Boolean))];
+      const options = () => ids.map((id) => (e.getRootNode() as Document).getElementById?.(id)).filter((l): l is HTMLElement => !!l)
+        .flatMap((l) => [...l.querySelectorAll('[role="option"]')]).filter((o) => shownNow(o) && !o.closest('[aria-disabled="true"]'));
+      const text = (o: Element) => (o.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      let fits: Element[] = [];
+      for (let waited = 0; waited <= 1000; waited += 50) {
+        fits = options().filter((o) => text(o).includes(want));
+        if (fits.length > 1) fits = fits.filter((o) => text(o) === want).length === 1 ? fits.filter((o) => text(o) === want) : fits;
+        if (fits.length === 1) break;
+        await new Promise((done) => setTimeout(done, 50));
+      }
+      if (fits.length !== 1) return { ok: false, reason: "unsupported", detail: `${fits.length} suggestions hold the value` };
+      const o = fits[0]!;
+      o.scrollIntoView({ block: "nearest" });
+      const ro = o.getBoundingClientRect();
+      if (!press(o, ro.x + ro.width / 2, ro.y + ro.height / 2)) return refused;
+      return { ok: true, value: (e as HTMLInputElement).value };
     } else if (op === "select") {
       const select = e as unknown as HTMLSelectElement;
       if (e.tagName !== "SELECT" || ![...select.options].some((o) => o.value === value && !o.disabled)) return { ok: false, reason: "unsupported", detail: "no such option" };
@@ -140,11 +191,11 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       e.focus({ preventScroll: true });
       const init = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
       const down = e.dispatchEvent(new KeyboardEvent("keydown", init));
-      const press = down && e.dispatchEvent(new KeyboardEvent("keypress", { ...init, charCode: 13 }));
+      const pressed = down && e.dispatchEvent(new KeyboardEvent("keypress", { ...init, charCode: 13 }));
       // HTML implicit submission, unless the page handled the key itself.
       const form = input.form;
       if (moved()) return refused;
-      if (press && form && !submitted) {
+      if (pressed && form && !submitted) {
         const button = [...form.elements].find((b): b is HTMLButtonElement => (b as HTMLButtonElement).type === "submit");
         if (button) { if (!button.disabled) button.click(); } else form.requestSubmit();
       }
