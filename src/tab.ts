@@ -73,7 +73,7 @@ export async function act(tabId: number, control: Control, request: ActRequest, 
   let results: Awaited<ReturnType<ScriptingApi["scripting"]["executeScript"]>>;
   try {
     results = await limit(browser.scripting.executeScript({
-      target, func: perform, args: [control.node, request, { guard: control.guard, key: frame.key }], world: "ISOLATED", injectImmediately: true,
+      target, func: perform, args: [control.node, request, { guard: control.guard, key: frame.key, to: control.action }], world: "ISOLATED", injectImmediately: true,
     }), 5000);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

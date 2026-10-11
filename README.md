@@ -101,7 +101,15 @@ flowchart LR
    link moves the tab to another site, the run stops with
    `blocked: "the page moved to another site"` before it acts there. Pass
    `allowHosts` to name more sites that you or your gate judged.
-7. `verify` checks each value, date and setting, checks that the run sent the
+7. One goal fills one form: the form whose labels fit the most of the goal.
+   When two forms fit about the same, the run stops with `blocked`. The run
+   sends only with the button the goal names (`click "Pay $40.00"`), and only
+   to the page's origin or `allowHosts`. A form that gets a card number,
+   CVC, IBAN or password sends only within the page's path, unless
+   `allowHosts` names its action URL (`"https://pay.example/charge"`). A
+   value with no field waits for a later step only when no sensitive value
+   goes in this send. Else the run stops with `blocked`.
+8. `verify` checks each value, date and setting, checks that the run sent the
    form it filled, and checks that the page is not an error, empty or captcha
    page.
 
@@ -203,6 +211,12 @@ The controller does not act on a score below 0.4.
 - The site check has no full public suffix list. It knows common two-part
   suffixes such as `co.uk` and `github.io`. On another suffix, two hosts under
   it can count as one site.
+- Destination checks (C22 to C29) are defence in depth, not a boundary. Page
+  script can read a field as foxpaw types, or send it with `fetch`. The
+  boundary is the approval that names where the data goes. The
+  `window.stop()` fallback for a moved action is not proven against every race.
+- Card fields in a cross-origin frame (Stripe Elements, Adyen, Braintree)
+  block by design: foxpaw types no goal value there (C27), so C20 stops the send.
 - foxpaw does not solve captchas. It stops with `blocked: "captcha"`.
 - The demo extension bundles no model, so its GLiNER2 option is off.
 - E2E tests cover local fixture pages only, not live sites.
