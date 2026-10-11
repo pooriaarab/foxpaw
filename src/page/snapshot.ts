@@ -19,6 +19,7 @@ export interface FrameRead {
     checked?: boolean; expanded?: boolean; disabled: boolean; readOnly: boolean; required: boolean;
     offscreen: boolean; form?: number; submit: boolean; dialog: boolean; popupFor?: number;
     autocomplete: boolean; picker: boolean; dateFormat?: string; secret: boolean; guard: string;
+    href?: string; row?: string;
   }[];
 }
 
@@ -135,13 +136,15 @@ export function readFrame(): FrameRead | null {
     fields().map((e) => [identity(e), shown(e), f(e).checked, f(e).selectedIndex, disabled(e)])]);
   // The row, list item or card around a control. A keyless list reuses its
   // nodes, so the same "Archive" button can move to another row's text.
-  const context = (e: Element): string => {
+  const rowHash = (e: Element): string => {
     const row = e.closest('li,tr,dd,article,[role="row"],[role="listitem"],[role="option"],[role="article"]');
     const text = (row?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 2000);
     let hash = 0x811c9dc5;
     for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
-    return `${section(e)}|${(hash >>> 0).toString(36)}`;
+    return (hash >>> 0).toString(36);
   };
+  const context = (e: Element): string => `${section(e)}|${rowHash(e)}`;
+  const inRow = (e: Element) => !!e.closest('li,tr,dd,article,[role="row"],[role="listitem"],[role="option"],[role="article"]');
   cache.guard = (e: Element) => e.isConnected && visible(e)
     ? JSON.stringify([role(e), name(e), shown(e), state(e) ?? null, f(e).selectedIndex ?? null, disabled(e),
       e.getAttribute("aria-expanded"), e.getAttribute("href"), context(e)])
@@ -197,6 +200,8 @@ export function readFrame(): FrameRead | null {
         !!e.getAttribute("list")),
       picker: typable && (/^(dialog|grid)$/.test(e.getAttribute("aria-haspopup") || "") || e.hasAttribute("data-datepicker")),
       dateFormat, secret: secret(e), guard: cache.guard(e) || "",
+      ...(rname === "link" && e.getAttribute("href") ? { href: e.getAttribute("href")! } : {}),
+      ...(inRow(e) ? { row: rowHash(e) } : {}),
     });
     if (controls.length >= 300) break;
   }
