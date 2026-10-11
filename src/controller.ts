@@ -97,7 +97,7 @@ const docOf = (page: Snapshot, frameId: number) => {
   const frame = page.frames.find((f) => f.frameId === frameId);
   return frame?.documentId ?? frame?.key.slice(0, 24) ?? "";
 };
-const keyOf = (page: Snapshot, c: Control) => `${docOf(page, c.frameId)}#${c.id}`;
+export const keyOf = (page: Snapshot, c: Control) => `${docOf(page, c.frameId)}#${c.id}`;
 const formOf = (page: Snapshot, c: Control) => (c.form === undefined ? keyOf(page, c) : `${docOf(page, c.frameId)}#${c.frameId}:form${c.form}`);
 const typable = (c: Control) => TYPABLE.has(c.role) || (c.role === "combobox" && c.tag === "input");
 const dated = (c: Control) => typable(c) && (c.picker || !!c.dateFormat || c.type === "date");

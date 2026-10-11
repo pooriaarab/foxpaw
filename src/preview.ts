@@ -4,8 +4,8 @@
 // a caller can pin it with an allowHosts URL entry (C32).
 import type { Chooser } from "./choosers/chooser.js";
 import { ruleChooser } from "./choosers/rule.js";
-import { decide, record, sensitive, start } from "./controller.js";
-import type { Snapshot } from "./types.js";
+import { decide, keyOf, record, sensitive, start, type RunState } from "./controller.js";
+import type { Control, Snapshot } from "./types.js";
 
 export interface PreviewOptions {
   /** Default: ruleChooser(). Use the chooser the run will use. */
@@ -39,26 +39,37 @@ const mask = (value: string) => {
   return /^\d{13,19}$/.test(digits) ? `•••• ${digits.slice(-4)}` : "•••";
 };
 
+/** Each control that serves a value, date or setting, in goal order: one the run acts on, or one that already shows it. */
+function fieldsOf(state: RunState, page: Snapshot, chosen: Map<string, string>): PlannedField[] {
+  const served: { index: number; control: Control }[] = [];
+  for (const control of page.controls) {
+    const index = state.taken.get(keyOf(page, control));
+    if (index !== undefined) served.push({ index, control });
+  }
+  return served.toSorted((a, b) => a.index - b.index).map(({ index, control }) => {
+    const r = state.requirements[index]!;
+    const shown = chosen.get(control.id) ?? (r.kind === "setting" ? "checked" : r.value ?? r.date ?? "");
+    return { label: control.label, value: control.secret || sensitive(r) ? mask(r.value ?? shown) : shown };
+  });
+}
+
 /** The form fill that `runTask` would start on `page`, without acting (C33). */
 export async function preview(page: Snapshot, goal: string, options: PreviewOptions = {}): Promise<FormPlan> {
   const chooser = options.chooser ?? ruleChooser();
   const state = await start(goal, chooser, options.today, { allowHosts: options.allowHosts ?? [] });
-  const fields: PlannedField[] = [];
-  const plan = (more: Partial<FormPlan> = {}): FormPlan => ({ sends: state.submit, destination: null, fields, ...more });
+  // The option label for a select the run would set, by control id.
+  const chosen = new Map<string, string>();
+  const plan = (more: Partial<FormPlan> = {}): FormPlan => ({ sends: state.submit, destination: null, fields: fieldsOf(state, page, chosen), ...more });
   for (let i = 0; i < state.maxSteps; i++) {
     const next = await decide(state, page, chooser);
     if (next.kind === "done") return plan();
     if (next.kind === "blocked") return plan({ blocked: next.reason });
-    const { control, request, requirement } = next;
+    const { control, request } = next;
     if (next.effect === "send") {
       // Enter sends to the field's action, a button to its own (C26). Outside a form there is none (C29).
       return plan({ destination: control.action ?? null, ...(control.role === "button" || control.submit ? { button: control.label } : {}) });
     }
-    if (requirement && next.effect !== "option" && next.effect !== "day" && next.effect !== "page-picker") {
-      const shown = request.op === "select" ? control.options?.find((o) => o.value === request.value)?.label ?? request.value
-        : request.op === "check" || (request.op === "click" && next.effect === "done") ? "checked" : request.value ?? requirement.date ?? "";
-      fields.push({ label: control.label, value: control.secret || sensitive(requirement) ? mask(requirement.value ?? shown ?? "") : shown ?? "" });
-    }
+    if (request.op === "select") chosen.set(control.id, control.options?.find((o) => o.value === request.value)?.label ?? request.value ?? "");
     record(state, next, { ok: true }, page);
     // A picker would open on the page; the plan takes the date as set.
     if (next.effect === "open-picker" && state.awaiting) {
