@@ -24,6 +24,28 @@ the code that makes them pass.
 | P11 | A list without keys reuses its DOM nodes. A row is removed, and the next row's text moves into the same nodes. The "Archive" button keeps its node and its label, but now belongs to another row. | The guard holds the control's section and a short hash of its row, list item or card text. When the row text changed, `act` returns `stale`. | E2E `stale check sees a reused row` |
 | P12 | A click on a link starts a navigation, and the next `executeScript` call goes to the document that is unloading. Firefox never answers it, so the run hangs. | Each `snapshot`, `act` and `settle` call gives up after a time limit (5 s, 5 s, 3 s). `runTask` reads the new page again. | E2E `run does not act after a link to another site`, `allowHosts lets the run go on` |
 
+## Page text for a planner: `pageText` and `changeText`
+
+A planner model reads the page as text, and each token costs time. `pageText`
+trims a snapshot to the controls that matter. `changeText` tells the planner
+what an action changed, in place of the whole page. Both return page data
+only: the caller puts all of it inside its data fence.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| T1 | The 40-control budget fills with header and menu links. No form field and no product shows (Amazon). | Runs of 5 or more short links outside forms fold into one line. Fields, submit buttons and dialog controls are picked first, then visible controls, then the rest. The kept lines stay in page order. | Isolated `tests/text.test.ts` |
+| T2 | The trim drops the only submit button, or a field that sits inside a menu. | Only links fold. A field or a submit button is never folded and is picked before any link. | Isolated `tests/text.test.ts` |
+| T3 | A fold line names an id that is not a control, or a folded control can no longer be used. | A fold line names its first and last real ids. Folding changes only the text: every control stays in the snapshot, so its id still works. | Isolated `tests/text.test.ts` |
+| T4 | Rows of content (Hacker News stories: upvote, title, site, user, time) read as a menu and fold. | A run of links breaks where two links share a row, a section or a frame. | Isolated `tests/text.test.ts` |
+| T5 | The dedupe merges links that do different things ("upvote" on each story). | Only links with the same label and the same href count as duplicates. | Isolated `tests/text.test.ts` |
+| T6 | The text cut drops content: a line that equals the label of a control that did not make the cut (a product title). | A text line is dropped only when it repeats the label of a control line or a folded link that the text shows. Repeated short lines are dropped, unless they read as an error or an alert. | Isolated `tests/text.test.ts` |
+| T7 | Text that a scanner such as foxshield wrapped in `<untrusted-data>` loses its wrapper: a dedupe or a diff keeps the middle line and drops a marker line, so injected text reads as plain page text. | A wrapped block is one unit. It is kept whole or left out whole, and never deduped. | Isolated `tests/text.test.ts` |
+| D1 | The diff after an action hides an error message that the page showed. | Every new text line goes into the diff. When the new text is too long for a diff (over 1200 characters, or over half the page text), `changeText` returns the whole page. | Isolated `tests/text.test.ts` |
+| D2 | The action navigated. A diff against the old page is wrong. | When the address, the top-frame document or the set of frames changed, `changeText` returns the whole page with `full: true`. | Isolated `tests/text.test.ts` |
+| D3 | The page re-rendered, so ids changed between the two reads. The diff names an old id. | Controls are matched by id only. A re-mounted control shows as gone (old id) and new (new id). When over half the controls differ, `changeText` returns the whole page. | Isolated `tests/text.test.ts` |
+| D4 | The diff says a password field is empty when it holds a value, or shows its value. | The diff prints the values of the second snapshot as they are ("•••", or a caller's "[redacted]"). The control that was acted on is always listed with its value. | Isolated `tests/text.test.ts` |
+| D5 | Nothing changed after a click, and the planner cannot tell. | The diff says that nothing on the page changed. | Isolated `tests/text.test.ts` |
+
 ## Goal parsing
 
 | # | Failure mode | Wanted behaviour | Test |
