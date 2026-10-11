@@ -2,7 +2,7 @@
 // step and the result checklist. It uses ruleChooser: this build bundles no
 // model. The E2E test drives the same code through window.foxpaw, which only
 // the e2e build (build-ext.mjs --e2e) has.
-import { act, changeText, pageText, runTask, settle, snapshot } from "../src/index.ts";
+import { act, runTask, settle, snapshot } from "../src/index.ts";
 
 const $ = (id) => document.getElementById(id);
 
@@ -54,4 +54,4 @@ $("goal-form").addEventListener("submit", async (event) => {
   await run(tab.id, $("goal").value).catch((error) => { $("status").textContent = error.message; });
 });
 
-if (__E2E__) window.foxpaw = { snapshot, act, settle, run, tabFor, pageText, changeText };
+if (__E2E__) window.foxpaw = { snapshot, act, settle, run, tabFor };
