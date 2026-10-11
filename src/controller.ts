@@ -9,6 +9,7 @@ import { firstDate, formatDate, readDate } from "./dates.js";
 import { parseGoal, type Requirement } from "./goal.js";
 import { nearlyNames } from "./match.js";
 import { allowedBy } from "./safety.js";
+import { sameSite } from "./site.js";
 import type { ActRequest, ActResult, Control, Snapshot } from "./types.js";
 
 /** Scores below this are not acted on. */
@@ -62,10 +63,14 @@ export interface RunState {
   stale: number;
   history: StepRecord[];
   refusals: { step: number; action: string; reason: string; detail?: string }[];
+  /** The one form this run fills (C19), or null before it is chosen or on a page with one form. */
+  form: string | null;
+  /** More sites a form may send to (C22), as runTask's `allowHosts`. */
+  allowHosts: string[];
 }
 
 /** Parses the goal and asks the Chooser for values the rules did not find ("as Sam Lee"). */
-export async function start(goal: string, chooser: Chooser, today = new Date(), options: { maxSteps?: number } = {}): Promise<RunState> {
+export async function start(goal: string, chooser: Chooser, today = new Date(), options: { maxSteps?: number; allowHosts?: string[] } = {}): Promise<RunState> {
   const parsed = parseGoal(goal, today);
   const spans = Object.values(await chooser.extract(goal, ["person", "location", "organization", "email", "phone", "number"])).flat();
   const requirements = parsed.requirements.map((r) => {
@@ -79,6 +84,7 @@ export async function start(goal: string, chooser: Chooser, today = new Date(), 
     goal, requirements, submit: parsed.submit, today, maxSteps: options.maxSteps ?? 40,
     status: requirements.map(() => "pending"), unmatched: [], taken: new Map(), refused: new Set(), awaiting: null,
     pickerTurns: 0, filled: new Set(), tried: new Set(), sentForms: new Set(), pendingSend: null, sent: false, stale: 0, history: [], refusals: [],
+    form: null, allowHosts: options.allowHosts ?? [],
   };
 }
 
@@ -91,6 +97,31 @@ const formOf = (page: Snapshot, c: Control) => (c.form === undefined ? keyOf(pag
 const typable = (c: Control) => TYPABLE.has(c.role) || (c.role === "combobox" && c.tag === "input");
 const dated = (c: Control) => typable(c) && (c.picker || !!c.dateFormat || c.type === "date");
 const unsafe = (c: Control, goal: string) => !allowedBy(c.label, goal);
+/** A requirement that names a button to press: `click "Pay $40.00"` (C21). */
+const presses = (r: Requirement) => !!r.value && /^(?:then\s+)?(?:click|press|tap|hit)$/i.test(r.key.trim());
+
+/**
+ * The form whose labels fit the most requirements, or null when the page has
+ * fewer than two forms or no form fits (C19). A tie keeps page order.
+ */
+function chooseForm(state: RunState, page: Snapshot, usable: Control[]): string | null {
+  const forms = new Map<string, Set<string>>();
+  for (const c of usable) {
+    if (c.form === undefined || c.submit) continue;
+    const key = formOf(page, c);
+    const seen = forms.get(key) ?? new Set<string>();
+    for (const w of words(`${c.label} ${c.name.replace(/[_-]/g, " ")} ${c.placeholder}`)) seen.add(w);
+    forms.set(key, seen);
+  }
+  if (forms.size < 2) return null;
+  let best: string | null = null;
+  let top = 0;
+  for (const [key, seen] of forms) {
+    const fits = state.requirements.filter((r) => !presses(r) && words(r.key || r.text).some((w) => seen.has(w))).length;
+    if (fits > top) [best, top] = [key, fits];
+  }
+  return best;
+}
 
 export async function decide(state: RunState, page: Snapshot, chooser: Chooser): Promise<Next> {
   if (state.history.length >= state.maxSteps) return { kind: "blocked", reason: "step limit reached" };
@@ -130,6 +161,9 @@ export async function decide(state: RunState, page: Snapshot, chooser: Chooser):
     }
   }
 
+  // One goal fills one form (C19). Choose it again when it is gone, as after a new page.
+  if (!state.form || !usable.some((c) => formOf(page, c) === state.form)) state.form = chooseForm(state, page, usable);
+
   for (const [index, r] of state.requirements.entries()) {
     if (state.status[index] !== "pending") continue;
     const next = await serve(state, page, usable, chooser, index, r, act);
@@ -137,16 +171,33 @@ export async function decide(state: RunState, page: Snapshot, chooser: Chooser):
   }
 
   if (!state.submit) return { kind: "done" };
+  const unmatched = state.requirements.map((r, i) => (state.status[i] === "unmatched" ? r : null)).filter((r): r is Requirement => !!r);
+  const wanted = unmatched.filter(presses).map((r) => r.value!);
+  const missing = unmatched.filter((r) => !presses(r) && (r.kind === "value" || r.kind === "date"));
   for (const form of state.filled) {
     if (state.sentForms.has(form)) continue;
     const inForm = page.controls.filter((c) => formOf(page, c) === form || keyOf(page, c) === form);
     if (!inForm.length) continue;
     if (state.tried.has(form)) return { kind: "blocked", reason: "the form did not send" };
-    const button = inForm.find((c) => c.submit) ?? inForm.find((c) => c.role === "button" && SEND.test(c.label));
+    // A half-filled form is a guess, and its data goes wherever it posts (C20).
+    if (missing.length) return { kind: "blocked", reason: `${missing.map((r) => `"${r.text}"`).join(", ")} fit no field in the form, so foxpaw did not send it` };
+    const names = (c: Control) => wanted.some((w) => nearlyNames(c.label, w));
+    const button = inForm.find((c) => c.submit && names(c)) ?? inForm.find((c) => c.submit) ?? inForm.find((c) => c.role === "button" && SEND.test(c.label));
     if (button?.disabled) return { kind: "blocked", reason: "the submit button is disabled" };
-    if (button && unsafe(button, state.goal)) return { kind: "blocked", reason: `sending presses "${button.label}", which the goal does not ask for` };
+    if (button && unsafe(button, state.goal) && !names(button)) return { kind: "blocked", reason: `sending presses "${button.label}", which the goal does not ask for` };
+    // The goal named the button to press: no other button sends (C21).
+    if (wanted.length && !(button && names(button))) {
+      return { kind: "blocked", reason: `sending presses "${button?.label ?? "Enter"}", but the goal names "${wanted[0]}"` };
+    }
+    const field = button ? undefined : inForm.findLast((c) => typable(c) && state.taken.has(keyOf(page, c)));
+    // Where the data goes: a form that posts to another site never sends (C22).
+    const to = (button ?? field)?.action;
+    if (to && /^https?:/i.test(to) && !sameSite(page.url, to, state.allowHosts)) {
+      return { kind: "blocked", reason: `the form sends to ${new URL(to).hostname}, which is not the site of this page` };
+    }
+    for (const [i, r] of state.requirements.entries()) if (state.status[i] === "unmatched" && presses(r)) state.status[i] = "done";
+    state.unmatched = state.unmatched.filter((r) => !presses(r));
     if (button) return act(button, { op: "click" }, "CLICK", null, "send");
-    const field = inForm.findLast((c) => typable(c) && state.taken.has(keyOf(page, c)));
     if (field) return act(field, { op: "enter" }, "PRESS_ENTER", null, "send");
   }
   return { kind: "done" };
@@ -158,6 +209,7 @@ async function serve(
   act: (control: Control, request: ActRequest, operation: string, index: number | null, effect: Effect) => Next,
 ): Promise<Next | null> {
   const free = usable.filter((c) => !state.taken.has(keyOf(page, c)) && !c.popupFor && !c.submit && !unsafe(c, state.goal) &&
+    (c.form === undefined || !state.form || formOf(page, c) === state.form) &&
     (!c.secret || /password|passcode|\bpin\b/i.test(r.key)));
   const named = (c: Control) => !!r.value && (c.tag === "select" ? !!c.options?.some((o) => nearlyNames(o.label, r.value!)) :
     ["option", "radio", "tab"].includes(c.role) && nearlyNames(c.label, r.value));

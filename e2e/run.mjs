@@ -127,9 +127,13 @@ try {
   const nowhere = await run("search.html", "search: tab groups");
   check("a send with no effect is not verified", { status: "blocked", reason: "the form did not send", verified: false },
     { status: nowhere.status, reason: nowhere.blockedReason, verified: nowhere.verified });
-  const away = await run("away.html", "email: sam@example.com, name: Sam Lee");
-  check("run stops on another site", { status: "blocked", reason: "the page moved to another site", host: "localhost", acted: ["Email", "Join"] },
-    { status: away.status, reason: away.blockedReason, host: new URL(away.url).hostname, acted: away.steps.map((s) => s.action) });
+  const away = await run("away.html", "email: sam@example.com");
+  check("run does not send a form that posts to another site", { status: "blocked", reason: "the form sends to localhost, which is not the site of this page", acted: ["Email"] },
+    { status: away.status, reason: away.blockedReason, acted: away.steps.map((s) => s.action) });
+  const lookalike = await run("lookalike.html", "full name: Sam Park, email: sam.park@example.com, card number: 4242 4242 4242 4242, expiry: 12/29, CVC: 123, pay");
+  const paid = new URL(lookalike.url);
+  check("run fills and sends only the form that fits the goal", { status: "done", page: "/thanks.html", card: "4242 4242 4242 4242", express: false },
+    { status: lookalike.status, page: paid.pathname, card: paid.searchParams.get("card"), express: lookalike.steps.some((s) => s.action === "Pay with Express") });
   const linked = await run("away.html", "open partner profile, name: Sam Lee");
   check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
     { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });

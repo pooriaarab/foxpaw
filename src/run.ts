@@ -71,7 +71,7 @@ export async function runTask(tabId: number, goal: string, options: RunOptions =
   const started = Date.now();
   const browser = options.browser ?? api();
   const chooser = options.chooser ?? ruleChooser();
-  const state = await start(goal, chooser, options.today, { maxSteps: options.maxSteps });
+  const state = await start(goal, chooser, options.today, { maxSteps: options.maxSteps, allowHosts: options.allowHosts });
   const group = options.group ? await groupTab(tabId) : null;
   const result: RunResult = {
     goal, url: "", status: "error", verified: false, checks: [], steps: state.history, refusals: state.refusals,

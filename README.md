@@ -101,7 +101,12 @@ flowchart LR
    link moves the tab to another site, the run stops with
    `blocked: "the page moved to another site"` before it acts there. Pass
    `allowHosts` to name more sites that you or your gate judged.
-7. `verify` checks each value, date and setting, checks that the run sent the
+7. One goal fills one form: the form whose labels fit the most of the goal.
+   A look-alike form on the same page gets nothing. The run sends that form
+   only when every value in the goal found a field, only with the button the
+   goal names (`click "Pay $40.00"`), and only when the form's `action` is on
+   the page's site or in `allowHosts`. Else it stops with `blocked`.
+8. `verify` checks each value, date and setting, checks that the run sent the
    form it filled, and checks that the page is not an error, empty or captcha
    page.
 

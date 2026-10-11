@@ -36,6 +36,8 @@ export interface Control {
   form?: number;
   /** Clicking it sends its form. */
   submit: boolean;
+  /** Where its form sends, as a full URL: a submit button's `formaction`, else the form's `action`. Absent outside a form. */
+  action?: string;
   /** Inside a dialog, listbox or menu that is open over the page. */
   dialog: boolean;
   /** For an autocomplete option: the id of the field whose list holds it. */

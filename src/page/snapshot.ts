@@ -168,6 +168,17 @@ export function readFrame(): FrameRead | null {
       .replace(/JJ/g, "DD").replace(/AAAA/g, "YYYY").replace(/TT/g, "DD").replace(/JJJJ/g, "YYYY");
     return /\b(?:DD|MM|YYYY)[./-](?:DD|MM)[./-](?:YYYY|DD)\b/.exec(hint)?.[0];
   };
+  // Where a control's form sends (C22). The prototype getter, because a field
+  // named "action" shadows form.action.
+  const formAction = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "action")!.get!;
+  const sendsTo = (e: Element, form: HTMLFormElement): string => {
+    const own = (e.tagName === "BUTTON" || e.tagName === "INPUT") && e.hasAttribute("formaction") ? e.getAttribute("formaction")! : null;
+    try {
+      return own === null ? String(formAction.call(form)) : new URL(own, document.baseURI).href;
+    } catch {
+      return "";
+    }
+  };
   const selector = "a[href],button,input,textarea,select,summary,[contenteditable=\"true\"]," +
     ROLES.map((r) => `[role="${r}"]`).join(",");
   const controls: FrameRead["controls"] = [];
@@ -194,6 +205,7 @@ export function readFrame(): FrameRead | null {
       required: !!f(e).required || e.getAttribute("aria-required") === "true",
       offscreen, form: form ? identity(form) : undefined,
       submit: !!f(e).form && (f(e).type === "submit" || f(e).type === "image"),
+      ...(form ? { action: sendsTo(e, form) } : {}),
       dialog: !!e.closest('dialog,[role="dialog"],[aria-modal="true"],[role="listbox"],[role="menu"],[role="grid"]'),
       popupFor: source && ["option", "gridcell", "menuitem"].includes(rname) ? source.node : undefined,
       autocomplete: typable && (e.getAttribute("aria-autocomplete") === "list" || e.getAttribute("role") === "combobox" ||
