@@ -77,6 +77,38 @@ try {
   const typed = await call("frames.html", "act", news, { op: "type", value: "sam@example.com" }, await call("frames.html", "snapshot"));
   check("iframe form is read and filled", { frame: true, value: "sam@example.com" }, { frame: news.frameId !== 0, value: typed.value });
 
+  // Pickers and the fold (P13-P17): an autocomplete, a text date field with a calendar, tall and far buttons.
+  const picker = await open("picker.html");
+  const onPicker = async (label, request) => {
+    const snap = await call("picker.html", "snapshot");
+    const target = snap.controls.find((c) => c.label === label);
+    const result = await call("picker.html", "act", target, request, snap);
+    await call("picker.html", "settle", { frameId: target.frameId }).catch(() => 0);
+    return result;
+  };
+  const out = (id) => picker.evaluate((i) => document.getElementById(i).textContent, id);
+  const twoLondons = await onPicker("From", { op: "select", value: "London" });
+  check("select on an ambiguous suggestion list picks nothing", { ok: false, reason: "unsupported", detail: "2 suggestions hold the value", picked: "", value: "London" },
+    { ok: twoLondons.ok, reason: twoLondons.reason, detail: twoLondons.detail, picked: await out("picked"), value: await picker.evaluate(() => document.getElementById("from").value) });
+  const picked = await onPicker("From", { op: "select", value: "lhr" });
+  check("select picks the suggestion that holds the value", { ok: true, picked: "LHR", value: "London Heathrow (LHR)" },
+    { ok: picked.ok, picked: await out("picked"), value: await picker.evaluate(() => document.getElementById("from").value) });
+  const dated = await onPicker("Depart", { op: "date", value: "12/01/2026" });
+  const calendarAfter = await call("picker.html", "snapshot");
+  check("date in a text field closes the calendar it opened", { ok: true, value: "12/01/2026", days: 0, hidden: true },
+    { ok: dated.ok, value: await picker.evaluate(() => document.getElementById("depart").value), days: calendarAfter.controls.filter((c) => c.label.startsWith("Day ")).length, hidden: await picker.evaluate(() => document.getElementById("calendar").hidden) });
+  await picker.evaluate(() => { const d = document.getElementById("depart"); d.blur(); d.focus(); });
+  const redrawn = await onPicker("Next month", { op: "click" });
+  check("a click that redraws its own button in a form is not a destination change", { ok: true, month: "1", url: true },
+    { ok: redrawn.ok, month: await out("month"), url: picker.url().endsWith("/picker.html") });
+  await picker.evaluate(() => { document.getElementById("calendar").hidden = true; scrollTo(0, 0); });
+  const tall = await onPicker("Tall button", { op: "click" });
+  check("a control with its centre below the window is clicked", { ok: true, last: "tall" }, { ok: tall.ok, last: await out("last") });
+  await picker.evaluate(() => scrollTo(0, 0));
+  await onPicker("Far button", { op: "scroll" });
+  check("scroll with no value brings the control into view", true,
+    await picker.evaluate(() => { const r = document.getElementById("far").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
+
   // Page text for a planner: the trim, and the diff after an action (T1-T7, D1-D5).
   const textOf = (fn, ...a) => ext.evaluate((f, args) => window.foxpaw[f](...args), fn, a);
   await open("menu.html");
