@@ -51,6 +51,14 @@ describe("preview (C33)", () => {
     expect(plan.fields).toEqual([{ label: "Country", value: "Canada" }, { label: "Check in", value: "2026-10-02" }, { label: "Accept the terms", value: "checked" }]);
   });
 
+  it("lists a field that already holds its value: the send carries it too", async () => {
+    const to = { action: "http://fixture/booked" };
+    const controls = [c("Name", to), c("Party size", { ...to, tag: "select", role: "combobox", options: [{ value: "2", label: "2", selected: true }, { value: "3", label: "3", selected: false }] }),
+      c("Book a table", { ...to, role: "button", submit: true })];
+    const plan = await preview(page(controls), "name: Ana Silva, party size: 2", options);
+    expect(plan.fields).toEqual([{ label: "Name", value: "Ana Silva" }, { label: "Party size", value: "2" }]);
+  });
+
   it("has no destination when the goal does not send", async () => {
     const plan = await preview(page([c("Email", { action: "http://fixture/signup" })]), "email: sam@example.com, do not submit", options);
     expect(plan).toEqual({ sends: false, destination: null, fields: [{ label: "Email", value: "sam@example.com" }] });
