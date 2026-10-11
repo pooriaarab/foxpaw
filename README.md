@@ -146,7 +146,7 @@ foxpaw is a library. It has no CLI and no MCP server.
 
 | Export | What it does |
 |---|---|
-| `runTask(tabId, goal, options?)` | Runs a goal on a tab and returns a `RunResult`: `status` (`done`, `blocked`, `stopped`, `error`), `verified`, `checks`, `steps`, `refusals`, `blockedReason`, `unmatched`, `totalMs`. Options: `chooser`, `maxSteps` (40), `today`, `group`, `onStep`, `signal`, `allowHosts`. |
+| `runTask(tabId, goal, options?)` | Runs a goal on a tab and returns a `RunResult`: `status` (`done`, `blocked`, `stopped`, `error`), `verified`, `checks`, `steps`, `refusals`, `blockedReason`, `unmatched`, `totalMs`. Options: `chooser`, `maxSteps` (40), `today`, `group`, `onStep`, `signal`, `allowHosts`, `read` (reads each page in place of `snapshot`, so a caller can put a shield such as foxshield in front of the run). |
 | `preview(snapshot, goal, options?)` | What `runTask` would do on this snapshot, without acting: `{ sends, destination, button, fields, blocked }`. `fields` holds the label and value of each field that gets one; a card number shows as `•••• 4242`, another sensitive value as `•••`. `destination` is the send's action URL, or null. Options: `chooser`, `today`, `allowHosts`. |
 | `snapshot(tabId)` | Reads every frame of the tab into a `Snapshot` of `Control` objects. |
 | `act(tabId, control, request, snapshot)` | Does one operation on one control: `click`, `type`, `select`, `check`, `uncheck`, `date`, `enter` or `scroll`. Returns `{ ok }`, or `{ ok: false, reason }` with `stale`, `gone`, `hidden`, `covered`, `disabled`, `readonly`, `unsupported` or `navigated`. |
