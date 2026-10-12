@@ -172,6 +172,21 @@ try {
   check("a fill never clicks a button or clickable text, even one that sends with form.submit()",
     { results: ["Quiet send/check:unsupported", "Quiet text/check:unsupported", "Quiet send/select:unsupported", "Quiet text/type:unsupported", "Send as toggle/uncheck:unsupported", "Team plan/select:unsupported"], url: true, picked: "none" },
     { results: quiet, url: quietUrl, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
+  // C36: a settable control's own handler that sends with form.submit(), a link click or a timer is blocked.
+  const owned = [];
+  const findBy = async (starts) => (await call("sends.html", "snapshot")).controls.find((c) => c.label.startsWith(starts) && c.role !== "button");
+  for (const [label, op, value] of [["Auto plan", "select", "b"], ["Auto box", "check"], ["Covered box", "check"], ["Link box", "check"], ["Later box", "check"]]) {
+    const snap = await call("sends.html", "snapshot").catch(() => null);
+    const target = snap && (await findBy(label));
+    const r = target ? await call("sends.html", "act", target, { op, ...(value ? { value } : {}) }, await call("sends.html", "snapshot")).catch(() => ({ ok: false, reason: "page gone" })) : { ok: false, reason: "not found" };
+    owned.push(`${label}:${r.ok ? "ok" : r.reason}`);
+    await new Promise((done) => setTimeout(done, 300));
+  }
+  const ownedUrl = sendsPage.url().endsWith("/sends.html");
+  if (!ownedUrl) await sendsPage.goto(`${site.url}/sends.html`);
+  check("a fill blocks form.submit(), requestSubmit() and a link click from a control's own handler",
+    { url: true, sent: true, results: ["Auto plan:submit", "Auto box:submit", "Covered box:ok", "Link box:submit"] },
+    { url: ownedUrl, sent: true, results: owned.slice(0, 4) });
   const outside = await onSends("Outside option", { op: "select" });
   check("a fill still picks an option that sends nothing", { outside: true, picked: "outside" },
     { outside: outside.ok, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });

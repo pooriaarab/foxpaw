@@ -34,6 +34,8 @@ export interface PageCache {
   to(e: Element): string | null;
   /** Each control's destination when foxpaw first read it (C25). */
   first?: WeakMap<Element, string | null>;
+  /** The page's own submit, requestSubmit and link click, replaced during a fill op and put back after (C36). */
+  nav?: { restore(): void; timer?: ReturnType<typeof setTimeout> };
 }
 
 declare global {

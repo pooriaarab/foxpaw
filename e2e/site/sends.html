@@ -17,16 +17,24 @@
       <div role="checkbox" aria-checked="false" id="sneakybox">Sneaky box</div>
       <button type="button" id="jsbutton" onclick="document.getElementById('order').submit()">Quiet send</button>
       <span id="jsspan" style="cursor: pointer" onclick="document.getElementById('order').submit()">Quiet text</span>
+      <select aria-label="Auto plan" onchange="this.form.submit()"><option value="a">Plan A</option><option value="b">Plan B</option></select>
+      <label>Auto box <input type="checkbox" onclick="this.form.submit()" /></label>
+      <label style="position: relative; display: inline-block">Covered box <input type="checkbox" /><button type="button" onclick="document.getElementById('order').submit()" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0.01">cover</button></label>
+      <div role="checkbox" aria-checked="false" onclick="setTimeout(() => document.getElementById('order').submit(), 50)">Later box</div>
+      <div role="checkbox" aria-checked="false" onclick="document.getElementById('away').click()">Link box</div>
     </form>
     <div role="listbox" aria-label="Pages">
       <a role="option" href="thanks.html?via=option">Link option</a>
       <div role="option" aria-selected="false" id="outside">Outside option</div>
     </div>
+    <a id="away" href="thanks.html?via=link" style="display: none">away</a>
     <p>Sent: <output id="sent">0</output> Picked: <output id="picked">none</output></p>
     <script>
       const order = document.getElementById("order");
       // A page script that sends the form when an option or a box is clicked.
-      for (const id of ["sneaky", "sneakybox"]) document.getElementById(id).addEventListener("click", () => order.requestSubmit());
+      document.getElementById("sneaky").addEventListener("click", () => order.requestSubmit());
+      // form.submit() fires no submit event (C36).
+      document.getElementById("sneakybox").addEventListener("click", () => order.submit());
       document.addEventListener("submit", (event) => {
         if (!event.defaultPrevented) document.getElementById("sent").textContent = String(Number(document.getElementById("sent").textContent) + 1);
         event.preventDefault();
