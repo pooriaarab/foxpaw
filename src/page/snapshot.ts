@@ -110,6 +110,8 @@ export function readFrame(): FrameRead | null {
   };
   const ROLES = ["button", "link", "checkbox", "radio", "switch", "tab", "menuitem", "menuitemradio", "option",
     "gridcell", "combobox", "textbox", "searchbox", "spinbutton"];
+  const selector = "a[href],button,input,textarea,select,summary,[contenteditable=\"true\"]," +
+    ROLES.map((r) => `[role="${r}"]`).join(",");
   const role = (e: Element): string | null => {
     const explicit = e.getAttribute("role");
     if (explicit && ROLES.includes(explicit)) return explicit;
@@ -117,7 +119,7 @@ export function readFrame(): FrameRead | null {
     if (e.tagName === "A") return "link";
     if (e.tagName === "SELECT") return "combobox";
     if (e.tagName === "TEXTAREA" || (e as HTMLElement).isContentEditable) return "textbox";
-    if (e.tagName !== "INPUT") return null;
+    if (e.tagName !== "INPUT") return clickable(e) ? "button" : null;
     const type = f(e).type;
     if (type === "checkbox" || type === "radio") return type;
     if (["button", "submit", "reset", "image"].includes(type)) return "button";
@@ -125,6 +127,15 @@ export function readFrame(): FrameRead | null {
     if (type === "number") return "spinbutton";
     if (["hidden", "file", "range", "color"].includes(type)) return null;
     return "textbox";
+  };
+  // Text a script makes clickable (P21): its own short text, a pointer cursor, no control in or around it.
+  const pointerBody = getComputedStyle(document.body).cursor === "pointer";
+  const ownText = (e: Element) => [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" ").replace(/\s+/g, " ").trim();
+  const clickable = (e: Element): boolean => {
+    if (pointerBody || !(e instanceof HTMLElement) || /^(BODY|HTML|LABEL|INPUT|OPTION)$/.test(e.tagName)) return false;
+    const text = ownText(e);
+    if (!text || text.length > 80 || getComputedStyle(e).cursor !== "pointer") return false;
+    return !e.querySelector(selector) && !e.parentElement?.closest(`${selector},label`);
   };
   const state = (e: Element): boolean | undefined => {
     if (e.tagName === "INPUT" && ["checkbox", "radio"].includes(f(e).type)) return f(e).checked;
@@ -189,10 +200,20 @@ export function readFrame(): FrameRead | null {
       .replace(/JJ/g, "DD").replace(/AAAA/g, "YYYY").replace(/TT/g, "DD").replace(/JJJJ/g, "YYYY");
     return /\b(?:DD|MM|YYYY)[./-](?:DD|MM)[./-](?:YYYY|DD)\b/.exec(hint)?.[0];
   };
-  const selector = "a[href],button,input,textarea,select,summary,[contenteditable=\"true\"]," +
-    ROLES.map((r) => `[role="${r}"]`).join(",");
   const controls: FrameRead["controls"] = [];
-  for (const e of new Set(deep(document, selector))) {
+  // Clickable text joins the controls in page order; a page with none reads as before (P21).
+  const clicks: Element[] = [];
+  const looked = new Set<Element>();
+  const texts = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = pointerBody ? null : texts.nextNode(), seen = 0; n && seen < 5000 && clicks.length < 60; n = texts.nextNode(), seen++) {
+    const parent = n.parentElement;
+    if (!parent || looked.has(parent) || !n.textContent?.trim()) continue;
+    looked.add(parent);
+    if (!parent.matches(selector) && clickable(parent) && visible(parent)) clicks.push(parent);
+  }
+  const inOrder = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+  const found = clicks.length ? [...new Set([...deep(document, selector), ...clicks])].toSorted(inOrder) : [...new Set(deep(document, selector))];
+  for (const e of found) {
     const rname = role(e);
     if (!rname || !visible(e)) continue;
     // The inner input owns typing; the outer combobox is not a second field.

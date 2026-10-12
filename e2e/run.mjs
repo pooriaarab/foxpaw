@@ -139,6 +139,16 @@ try {
   const earlier = await onDates("Date", { op: "type", value: "03/02/2016" });
   check("the calendar pages back to an earlier month", { ok: true, value: "03/02/2016" }, { ok: earlier.ok, value: await fieldValue("dp") });
 
+  // Text a script makes clickable (P21).
+  const clicks = await open("clicks.html");
+  const clickSnap = await call("clicks.html", "snapshot");
+  const clickLabels = clickSnap.controls.map((c) => `${c.role} ${c.label}`);
+  const est = clickSnap.controls.find((c) => c.label === "Est");
+  const estClick = est ? await call("clicks.html", "act", est, { op: "click" }, clickSnap) : { ok: false };
+  check("a clickable span is read as a button and clicked", { labels: ["button Est", "button dictum", "button Lyda", "button Vina"], ok: true, clicked: "Est" },
+    { labels: clickLabels.filter((l) => /Est|dictum|Lyda|Vina|Sergio/.test(l)), ok: estClick.ok, clicked: await clicks.evaluate(() => document.getElementById("clicked").textContent) });
+  check("clickable text needs its own short text and no control inside", [], clickLabels.filter((l) => /Plain|Card words|paragraph|^button Remember/.test(l)));
+
   // A fill never sends (C34): select and check refuse a control that sends a form or opens a page.
   const sendsPage = await open("sends.html");
   const onSends = async (label, request) => {
