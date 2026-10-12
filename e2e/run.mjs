@@ -98,6 +98,11 @@ try {
   check("select picks a suggestion that is open already, by its whole text", { ok: true, picked: "LGW" }, { ok: fromOpen.ok, picked: await out("picked") });
   const byCode = await onPicker("From", { op: "select", value: "London Heathrow (LHR)" });
   check("select types the code when the whole text finds no suggestion", { ok: true, picked: "LHR" }, { ok: byCode.ok, picked: await out("picked") });
+  const wrongCode = await onPicker("From", { op: "select", value: "London (CDG)" });
+  check("select needs the name and the code", { ok: false, reason: "unsupported" }, { ok: wrongCode.ok, reason: wrongCode.reason });
+  // A good pick closes the list again, so it does not cover the next field.
+  const otherWords = await onPicker("From", { op: "select", value: "London (LHR)" });
+  check("select matches a name and a code in other words", { ok: true, picked: "LHR" }, { ok: otherWords.ok, picked: await out("picked") });
   const dated = await onPicker("Depart", { op: "date", value: "12/01/2026" });
   const calendarAfter = await call("picker.html", "snapshot");
   check("date in a text field closes the calendar it opened", { ok: true, value: "12/01/2026", days: 0, hidden: true },
