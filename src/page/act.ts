@@ -184,15 +184,19 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       const options = () => ids.map((id) => (e.getRootNode() as Document).getElementById?.(id)).filter((l): l is HTMLElement => !!l)
         .flatMap((l) => [...l.querySelectorAll('[role="option"]')]).filter((o) => shownNow(o) && !o.closest('[aria-disabled="true"]'));
       const text = (o: Element) => (o.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      const bracket = /\(([^)]+)\)/.exec(value)?.[1]?.trim();
+      const before = value.replace(/\([^)]*\)/, "").trim();
+      // A name and a code in other words: the code in brackets and each word before it (P18).
+      const code = bracket ? `(${bracket.toLowerCase()})` : "";
+      const names = before.toLowerCase().split(/\s+/).filter(Boolean);
       const holding = () => {
         const all = options().filter((o) => text(o).includes(want));
         const exact = all.filter((o) => text(o) === want);
-        return all.length > 1 && exact.length === 1 ? exact : all;
+        if (all.length || !code) return all.length > 1 && exact.length === 1 ? exact : all;
+        return options().filter((o) => text(o).includes(code) && names.every((w) => text(o).includes(w)));
       };
       // A list that is open already; else the whole value, then the part in brackets, then the words before it.
       let fits = holding();
-      const bracket = /\(([^)]+)\)/.exec(value)?.[1]?.trim();
-      const before = value.replace(/\([^)]*\)/, "").trim();
       for (const query of [value, ...(bracket ? [bracket] : []), ...(before && before !== value.trim() ? [before] : [])]) {
         if (fits.length === 1) break;
         typeText(query);
