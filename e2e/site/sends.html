@@ -15,6 +15,8 @@
       <div role="grid" aria-label="Days"><div role="row"><input type="submit" role="gridcell" value="Send as day" /></div></div>
       <button aria-pressed="false">Send as toggle</button>
       <div role="checkbox" aria-checked="false" id="sneakybox">Sneaky box</div>
+      <button type="button" id="jsbutton" onclick="document.getElementById('order').submit()">Quiet send</button>
+      <span id="jsspan" style="cursor: pointer" onclick="document.getElementById('order').submit()">Quiet text</span>
     </form>
     <div role="listbox" aria-label="Pages">
       <a role="option" href="thanks.html?via=option">Link option</a>

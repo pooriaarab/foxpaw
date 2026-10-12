@@ -64,6 +64,18 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   // A read-only field that gets a date: a person opens its calendar and presses the day (P20).
   const calendarDay = readOnly && !native && (op === "date" || op === "type") ? toIso(value) : null;
   if ((op === "type" || op === "date") && readOnly && !calendarDay) return { ok: false, reason: "readonly" };
+  // A fill op sets only a control it may set; it never clicks a button, a link, a menu item or clickable text,
+  // whose script could send with form.submit(), which fires no submit event (C35). Those go through click.
+  const role = e.getAttribute("role") || "";
+  const box = e instanceof HTMLInputElement && (input.type === "checkbox" || input.type === "radio");
+  const settable =
+    op === "check" || op === "uncheck" ? box || /^(checkbox|radio|switch|menuitemcheckbox|menuitemradio)$/.test(role)
+    : op === "select" ? e.tagName === "SELECT" || ((e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement) && (role === "combobox" || e.getAttribute("aria-autocomplete") === "list"))
+      || (role === "option" && !!e.closest('[role="listbox"]')) || (role === "gridcell" && !!e.closest('[role="grid"],[role="treegrid"]'))
+    : op === "type" || op === "date" ? e instanceof HTMLTextAreaElement || e.isContentEditable
+      || (e instanceof HTMLInputElement && !["button", "submit", "reset", "image", "checkbox", "radio", "file", "hidden", "range", "color"].includes(input.type))
+    : true;
+  if (!settable) return { ok: false, reason: "unsupported", detail: `${op} does not set this control; use click, which asks for approval` };
   if (op === "scroll") {
     // A number scrolls the page; no value brings the control into view (P17).
     if (value.trim() && Number.isFinite(Number(value))) scrollBy({ top: Number(value), behavior: "instant" });
@@ -288,7 +300,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       }
       if (opened().length) press(document.body, 1, 1, false);
       return blocked ? sendsRefused : { ok: true, value: typed };
-    } else if (op === "select" && /^(option|menuitem|gridcell)$/.test(e.getAttribute("role") || "")) {
+    } else if (op === "select" && /^(option|gridcell)$/.test(role)) {
       if (!click()) return refused;
     } else if (op === "select" && e.tagName !== "SELECT" && (e.getAttribute("role") === "combobox" || e.getAttribute("aria-autocomplete") === "list") &&
       (e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement)) {

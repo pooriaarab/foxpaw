@@ -149,7 +149,8 @@ try {
     { labels: clickLabels.filter((l) => /Est|dictum|Lyda|Vina|Sergio/.test(l)), ok: estClick.ok, clicked: await clicks.evaluate(() => document.getElementById("clicked").textContent) });
   check("clickable text needs its own short text and no control inside", [], clickLabels.filter((l) => /Plain|Card words|paragraph|^button Remember/.test(l)));
 
-  // A fill never sends (C34): select and check refuse a control that sends a form or opens a page.
+  // A fill never sends (C34): select and check refuse a control that sends a form or opens a page (a menu item and a
+  // toggle button are refused before that, as controls a fill does not set: C35).
   const sendsPage = await open("sends.html");
   const onSends = async (label, request) => {
     const snap = await call("sends.html", "snapshot");
@@ -158,12 +159,22 @@ try {
   const refusals = [];
   for (const [label, op] of [["Send as menu item", "select"], ["Send as option", "select"], ["Send as day", "select"], ["Send as toggle", "check"],
     ["Link option", "select"], ["Sneaky option", "select"], ["Sneaky box", "check"]]) refusals.push((await onSends(label, { op })).reason);
-  check("a fill refuses a control that sends a form or opens a page", { reasons: Array(7).fill("submit"), sent: "0", url: true },
+  check("a fill refuses a control that sends a form or opens a page", { reasons: ["unsupported", "submit", "submit", "unsupported", "submit", "submit", "submit"], sent: "0", url: true },
     { reasons: refusals, sent: await sendsPage.evaluate(() => document.getElementById("sent").textContent), url: sendsPage.url().endsWith("/sends.html") });
-  const team = await onSends("Team plan", { op: "select" });
+  // C35: form.submit() fires no submit event, so a fill op must never click a button, a menu item or clickable text.
+  const quiet = [];
+  for (const [label, op] of [["Quiet send", "check"], ["Quiet text", "check"], ["Quiet send", "select"], ["Quiet text", "type"], ["Send as toggle", "uncheck"], ["Team plan", "select"]]) {
+    const r = await onSends(label, { op, value: "x" }).catch(() => ({ ok: false, reason: "page gone" }));
+    quiet.push(`${label}/${op}:${r.ok ? "ok" : r.reason}`);
+  }
+  const quietUrl = sendsPage.url().endsWith("/sends.html");
+  if (!quietUrl) await sendsPage.goto(`${site.url}/sends.html`);
+  check("a fill never clicks a button or clickable text, even one that sends with form.submit()",
+    { results: ["Quiet send/check:unsupported", "Quiet text/check:unsupported", "Quiet send/select:unsupported", "Quiet text/type:unsupported", "Send as toggle/uncheck:unsupported", "Team plan/select:unsupported"], url: true, picked: "none" },
+    { results: quiet, url: quietUrl, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
   const outside = await onSends("Outside option", { op: "select" });
-  check("a fill still picks an option that sends nothing", { team: true, outside: true, picked: "outside" },
-    { team: team.ok, outside: outside.ok, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
+  check("a fill still picks an option that sends nothing", { outside: true, picked: "outside" },
+    { outside: outside.ok, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
 
   // Page text for a planner: the trim, and the diff after an action (T1-T7, D1-D5).
   const textOf = (fn, ...a) => ext.evaluate((f, args) => window.foxpaw[f](...args), fn, a);
