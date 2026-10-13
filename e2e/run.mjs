@@ -139,7 +139,18 @@ try {
   const earlier = await onDates("Date", { op: "type", value: "03/02/2016" });
   check("the calendar pages back to an earlier month", { ok: true, value: "03/02/2016" }, { ok: earlier.ok, value: await fieldValue("dp") });
 
-  // A fill never sends (C34): select and check refuse a control that sends a form or opens a page.
+  // Text a script makes clickable (P21).
+  const clicks = await open("clicks.html");
+  const clickSnap = await call("clicks.html", "snapshot");
+  const clickLabels = clickSnap.controls.map((c) => `${c.role} ${c.label}`);
+  const est = clickSnap.controls.find((c) => c.label === "Est");
+  const estClick = est ? await call("clicks.html", "act", est, { op: "click" }, clickSnap) : { ok: false };
+  check("a clickable span is read as a button and clicked", { labels: ["button Est", "button dictum", "button Lyda", "button Vina"], ok: true, clicked: "Est" },
+    { labels: clickLabels.filter((l) => /Est|dictum|Lyda|Vina|Sergio/.test(l)), ok: estClick.ok, clicked: await clicks.evaluate(() => document.getElementById("clicked").textContent) });
+  check("clickable text needs its own short text and no control inside", [], clickLabels.filter((l) => /Plain|Card words|paragraph|^button Remember/.test(l)));
+
+  // A fill never sends (C34): select and check refuse a control that sends a form or opens a page (a menu item and a
+  // toggle button are refused before that, as controls a fill does not set: C35).
   const sendsPage = await open("sends.html");
   const onSends = async (label, request) => {
     const snap = await call("sends.html", "snapshot");
@@ -148,12 +159,51 @@ try {
   const refusals = [];
   for (const [label, op] of [["Send as menu item", "select"], ["Send as option", "select"], ["Send as day", "select"], ["Send as toggle", "check"],
     ["Link option", "select"], ["Sneaky option", "select"], ["Sneaky box", "check"]]) refusals.push((await onSends(label, { op })).reason);
-  check("a fill refuses a control that sends a form or opens a page", { reasons: Array(7).fill("submit"), sent: "0", url: true },
+  check("a fill refuses a control that sends a form or opens a page", { reasons: ["unsupported", "submit", "submit", "unsupported", "submit", "submit", "submit"], sent: "0", url: true },
     { reasons: refusals, sent: await sendsPage.evaluate(() => document.getElementById("sent").textContent), url: sendsPage.url().endsWith("/sends.html") });
-  const team = await onSends("Team plan", { op: "select" });
+  // C35: form.submit() fires no submit event, so a fill op must never click a button, a menu item or clickable text.
+  const quiet = [];
+  for (const [label, op] of [["Quiet send", "check"], ["Quiet text", "check"], ["Quiet send", "select"], ["Quiet text", "type"], ["Send as toggle", "uncheck"], ["Team plan", "select"]]) {
+    const r = await onSends(label, { op, value: "x" }).catch(() => ({ ok: false, reason: "page gone" }));
+    quiet.push(`${label}/${op}:${r.ok ? "ok" : r.reason}`);
+  }
+  const quietUrl = sendsPage.url().endsWith("/sends.html");
+  if (!quietUrl) await sendsPage.goto(`${site.url}/sends.html`);
+  check("a fill never clicks a button or clickable text, even one that sends with form.submit()",
+    { results: ["Quiet send/check:unsupported", "Quiet text/check:unsupported", "Quiet send/select:unsupported", "Quiet text/type:unsupported", "Send as toggle/uncheck:unsupported", "Team plan/select:unsupported"], url: true, picked: "none" },
+    { results: quiet, url: quietUrl, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
+  // C36: a settable control's own handler that sends with form.submit(), a link click or a timer is blocked.
+  const owned = [];
+  const findBy = async (starts) => (await call("sends.html", "snapshot")).controls.find((c) => c.label.startsWith(starts) && c.role !== "button");
+  for (const [label, op, value] of [["Auto plan", "select", "b"], ["Auto box", "check"], ["Covered box", "check"], ["Link box", "check"], ["Later box", "check"]]) {
+    const snap = await call("sends.html", "snapshot").catch(() => null);
+    const target = snap && (await findBy(label));
+    const r = target ? await call("sends.html", "act", target, { op, ...(value ? { value } : {}) }, await call("sends.html", "snapshot")).catch(() => ({ ok: false, reason: "page gone" })) : { ok: false, reason: "not found" };
+    owned.push(`${label}:${r.ok ? "ok" : r.reason}`);
+    await new Promise((done) => setTimeout(done, 300));
+  }
+  const ownedUrl = sendsPage.url().endsWith("/sends.html");
+  if (!ownedUrl) await sendsPage.goto(`${site.url}/sends.html`);
+  check("a fill blocks form.submit(), requestSubmit() and a link click from a control's own handler",
+    { url: true, sent: true, results: ["Auto plan:submit", "Auto box:submit", "Covered box:ok", "Link box:submit"] },
+    { url: ownedUrl, sent: true, results: owned.slice(0, 4) });
+  // C37: a deferred click on a submit button after a fill op, and a send from a native date field's change handler.
+  const deferred = [];
+  for (const [label, op, value] of [["Timer box", "check"], ["Send date", "date", "2026-10-20"]]) {
+    const snap = await call("sends.html", "snapshot").catch(() => null);
+    const target = snap?.controls.find((c) => c.label.startsWith(label));
+    const r = target ? await call("sends.html", "act", target, { op, ...(value ? { value } : {}) }, snap).catch(() => ({ ok: false, reason: "page gone" })) : { ok: false, reason: "not found" };
+    deferred.push(`${label}:${r.ok ? "ok" : r.reason}`);
+    await new Promise((done) => setTimeout(done, 400));
+  }
+  const deferredUrl = sendsPage.url().endsWith("/sends.html");
+  const deferredSent = deferredUrl ? await sendsPage.evaluate(() => document.getElementById("sent").textContent) : "navigated";
+  if (!deferredUrl) await sendsPage.goto(`${site.url}/sends.html`);
+  check("a fill blocks a deferred click on a submit button and a send from a native date field",
+    { results: ["Timer box:ok", "Send date:submit"], url: true, sent: "0" }, { results: deferred, url: deferredUrl, sent: deferredSent });
   const outside = await onSends("Outside option", { op: "select" });
-  check("a fill still picks an option that sends nothing", { team: true, outside: true, picked: "outside" },
-    { team: team.ok, outside: outside.ok, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
+  check("a fill still picks an option that sends nothing", { outside: true, picked: "outside" },
+    { outside: outside.ok, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });
 
   // Page text for a planner: the trim, and the diff after an action (T1-T7, D1-D5).
   const textOf = (fn, ...a) => ext.evaluate((f, args) => window.foxpaw[f](...args), fn, a);
