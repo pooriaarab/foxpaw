@@ -20,7 +20,50 @@ export async function perform(node: number, request: ActRequest, expect: { guard
 
   const input = e as HTMLInputElement;
   const { op, value = "" } = request;
-  if ((op === "type" || op === "date") && (input.readOnly || e.getAttribute("aria-readonly") === "true")) return { ok: false, reason: "readonly" };
+  // Dates and times in the common forms, for native fields (P19) and calendars (P20).
+  const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const monthNo = (word: string) => MONTHS.indexOf(word.slice(0, 3).toLowerCase()) + 1;
+  const toIso = (text: string): string | null => {
+    const t = text.trim().replace(/\s+/g, " ");
+    let m: RegExpExecArray | null;
+    let ymd: number[] | null = null;
+    if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t))) ymd = [+m[1]!, +m[2]!, +m[3]!];
+    else if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t))) ymd = [+m[3]!, +m[1]!, +m[2]!];
+    else if ((m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(t))) ymd = [+m[3]!, +m[2]!, +m[1]!];
+    else if ((m = /^(?:[a-z]+,? )?([a-z]{3,})\.? (\d{1,2})(?:st|nd|rd|th)?,? (\d{4})$/i.exec(t)) && monthNo(m[1]!)) ymd = [+m[3]!, monthNo(m[1]!), +m[2]!];
+    else if ((m = /^(?:[a-z]+,? )?(\d{1,2}) ([a-z]{3,})\.?,? (\d{4})$/i.exec(t)) && monthNo(m[2]!)) ymd = [+m[3]!, monthNo(m[2]!), +m[1]!];
+    if (!ymd) return null;
+    const [y, mo, d] = ymd as [number, number, number];
+    const day = new Date(Date.UTC(y, mo - 1, d));
+    return day.getUTCMonth() === mo - 1 && day.getUTCDate() === d ? `${y}-${p2(mo)}-${p2(d)}` : null;
+  };
+  const toTime = (text: string): string | null => {
+    const m = /^(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*([ap])?\.?\s?(?:m\.?)?$/i.exec(text.trim());
+    if (!m || (m[2] === undefined && !m[3])) return null;
+    let h = +m[1]!;
+    const min = +(m[2] ?? 0);
+    if (m[3]) {
+      if (h < 1 || h > 12) return null;
+      h = (h % 12) + (/p/i.test(m[3]) ? 12 : 0);
+    }
+    return h > 23 || min > 59 ? null : `${p2(h)}:${p2(min)}`;
+  };
+  const NATIVE: Record<string, [(text: string) => string | null, string]> = {
+    date: [toIso, "2019-11-08"],
+    time: [toTime, "10:57"],
+    month: [(t) => (/^\d{4}-\d{2}$/.test(t.trim()) ? t.trim() : toIso(t)?.slice(0, 7) ?? toIso(`1 ${t}`)?.slice(0, 7) ?? null), "2019-11"],
+    "datetime-local": [(t) => {
+      const m = /^(.*?\d{4}|\d{4}-\d{2}-\d{2})(?:T|,? )(.+)$/.exec(t.trim());
+      const d = m && toIso(m[1]!), h = m && toTime(m[2]!);
+      return d && h ? `${d}T${h}` : null;
+    }, "2019-11-08T10:57"],
+  };
+  const native = e instanceof HTMLInputElement && Object.hasOwn(NATIVE, input.type) ? NATIVE[input.type] : undefined;
+  const readOnly = input.readOnly || e.getAttribute("aria-readonly") === "true";
+  // A read-only field that gets a date: a person opens its calendar and presses the day (P20).
+  const calendarDay = readOnly && !native && (op === "date" || op === "type") ? toIso(value) : null;
+  if ((op === "type" || op === "date") && readOnly && !calendarDay) return { ok: false, reason: "readonly" };
   if (op === "scroll") {
     // A number scrolls the page; no value brings the control into view (P17).
     if (value.trim() && Number.isFinite(Number(value))) scrollBy({ top: Number(value), behavior: "instant" });
@@ -148,6 +191,84 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       return read();
     };
 
+    // The visible calendars on the page: a popup with 28 or more day numbers, the outermost one.
+    const dayText = (n: Element) => (n.textContent || "").replace(/\s+/g, " ").trim();
+    const dayCells = (cal: Element) => {
+      const cells = [...cal.querySelectorAll('button,a,td,[role="gridcell"],[role="button"]')].filter((c) => /^\d{1,2}$/.test(dayText(c)) && shownNow(c));
+      return cells.filter((c) => !cells.some((o) => o !== c && c.contains(o)));
+    };
+    const calendars = () => {
+      const all = [...document.querySelectorAll('[role="dialog"],[role="grid"],.ui-datepicker,[class*="datepicker" i],[class*="calendar" i]')]
+        .filter((p) => !p.contains(e) && shownNow(p) && dayCells(p).length >= 28);
+      return all.filter((p) => !all.some((o) => o !== p && o.contains(p)));
+    };
+    const pickDay = async (iso: string): Promise<ActResult> => {
+      const [ty, tm, td] = iso.split("-").map(Number) as [number, number, number];
+      const before = new Set(calendars());
+      click();
+      await new Promise((done) => setTimeout(done, 150));
+      let cal = calendars().find((c) => !before.has(c)) ?? calendars()[0];
+      if (!cal) return { ok: false, reason: "readonly", detail: "the field is read-only and opened no calendar" };
+      const badSel = '[aria-disabled="true"],.ui-state-disabled,[class*="other-month" i],[class*="outside" i],[class*="disabled" i]';
+      const good = (c: Element, within: Element) => !c.matches(":disabled") && !(c.closest(badSel) && within.contains(c.closest(badSel)));
+      const NAMES = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{4})\b/i;
+      const monthOf = (within: Element) => {
+        const m = NAMES.exec(within.textContent || "");
+        if (m) return { y: +m[2]!, m: monthNo(m[1]!) };
+        const holder = within.querySelector("[data-month][data-year]");
+        return holder ? { y: Number(holder.getAttribute("data-year")), m: Number(holder.getAttribute("data-month")) + 1 } : null;
+      };
+      const dayIn = (within: Element): Element | undefined => {
+        const cells = dayCells(within).filter((c) => good(c, within));
+        const tagged = cells.find((c) => (c.closest("[data-date]")?.getAttribute("data-date") ?? "").slice(0, 10) === iso);
+        if (tagged) return tagged;
+        const labelled = cells.find((c) => { const l = c.getAttribute("aria-label") || c.closest("[aria-label]")?.getAttribute("aria-label") || ""; return toIso(l) === iso; });
+        if (labelled) return labelled;
+        const own = cells.filter((c) => { const h = c.closest("[data-month][data-year]"); return h && within.contains(h) && Number(h.getAttribute("data-year")) === ty && Number(h.getAttribute("data-month")) === tm - 1 && Number(dayText(c)) === td; });
+        if (own.length === 1) return own[0];
+        const shown = monthOf(within);
+        const byNumber = shown && shown.y === ty && shown.m === tm ? cells.filter((c) => Number(dayText(c)) === td) : [];
+        return byNumber.length === 1 ? byNumber[0] : undefined;
+      };
+      const pressOn = (n: Element) => { const b = n.getBoundingClientRect(); press(n, b.x + b.width / 2, b.y + b.height / 2); };
+      for (let turn = 0; turn <= 24; turn++) {
+        if (!cal.isConnected || !shownNow(cal)) cal = calendars()[0];
+        if (!cal) return { ok: false, reason: "readonly", detail: "the calendar closed" };
+        const day = dayIn(cal);
+        if (day) {
+          // A day that sends a form or opens a page needs a click and its approval (C34).
+          if (sends(day)) return sendsRefused;
+          pressOn(day);
+          await new Promise((done) => setTimeout(done, 100));
+          if (blocked) return sendsRefused;
+          return input.value ? { ok: true, value: input.value } : { ok: false, reason: "readonly", detail: "the calendar day did not fill the field" };
+        }
+        const shown = monthOf(cal);
+        if (!shown) return { ok: false, reason: "readonly", detail: "the calendar shows no month" };
+        const ahead = ty * 12 + tm - (shown.y * 12 + shown.m);
+        if (ahead === 0) return { ok: false, reason: "readonly", detail: `the calendar has no day ${iso}` };
+        const way = ahead > 0 ? /\bnext\b|›|»|→/i : /\bprev(?:ious)?\b|‹|«|←/i;
+        const step = [...cal.querySelectorAll('button,a,[role="button"],[data-handler]')].filter(shownNow)
+          .find((b) => way.test(`${b.getAttribute("aria-label") || ""} ${b.getAttribute("title") || ""} ${dayText(b)} ${b.getAttribute("data-handler") || ""} ${b.getAttribute("class") || ""}`));
+        if (!step) return { ok: false, reason: "readonly", detail: "the calendar has no next or previous month button" };
+        if (sends(step)) return sendsRefused;
+        pressOn(step);
+        await new Promise((done) => setTimeout(done, 80));
+      }
+      return { ok: false, reason: "readonly", detail: `the calendar never showed ${iso}` };
+    };
+
+    if (calendarDay) return await pickDay(calendarDay);
+    if (native && (op === "type" || op === "date")) {
+      // A native date or time field takes only its own form (P19).
+      const [convert, example] = native;
+      const want = value.trim() ? convert(value) : "";
+      if (want === null) return { ok: false, reason: "unsupported", detail: `a ${input.type} field takes a value such as ${example}` };
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, want);
+      e.dispatchEvent(new Event("input", { bubbles: true }));
+      e.dispatchEvent(new Event("change", { bubbles: true }));
+      return input.value === want ? { ok: true, value: input.value } : { ok: false, reason: "unsupported", detail: `the field did not take ${want}` };
+    }
     if (op === "click") {
       if (!click()) return refused;
     } else if (op === "type") {
@@ -155,24 +276,18 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       return blocked ? sendsRefused : { ok: true, value: typed };
     }
     else if (op === "date") {
-      if (input.type !== "date") {
-        // A person closes the calendar the field opened: Escape, then a press outside (P16).
-        const before = new Set(popups());
-        const typed = typeText(value);
-        await new Promise((done) => setTimeout(done, 100));
-        const opened = () => popups().filter((p) => !before.has(p));
-        if (opened().length) {
-          const key = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true };
-          e.dispatchEvent(new KeyboardEvent("keydown", key));
-          e.dispatchEvent(new KeyboardEvent("keyup", key));
-        }
-        if (opened().length) press(document.body, 1, 1, false);
-        return blocked ? sendsRefused : { ok: true, value: typed };
+      // A person closes the calendar the field opened: Escape, then a press outside (P16).
+      const before = new Set(popups());
+      const typed = typeText(value);
+      await new Promise((done) => setTimeout(done, 100));
+      const opened = () => popups().filter((p) => !before.has(p));
+      if (opened().length) {
+        const key = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true };
+        e.dispatchEvent(new KeyboardEvent("keydown", key));
+        e.dispatchEvent(new KeyboardEvent("keyup", key));
       }
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, value);
-      e.dispatchEvent(new Event("input", { bubbles: true }));
-      e.dispatchEvent(new Event("change", { bubbles: true }));
-      return { ok: input.value === value, value: input.value };
+      if (opened().length) press(document.body, 1, 1, false);
+      return blocked ? sendsRefused : { ok: true, value: typed };
     } else if (op === "select" && /^(option|menuitem|gridcell)$/.test(e.getAttribute("role") || "")) {
       if (!click()) return refused;
     } else if (op === "select" && e.tagName !== "SELECT" && (e.getAttribute("role") === "combobox" || e.getAttribute("aria-autocomplete") === "list") &&
