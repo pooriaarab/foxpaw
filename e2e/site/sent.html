@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sent</title>
+  </head>
+  <body>
+    <h1>Sent</h1>
+    <!-- C38: a page script fakes the submit event, or sends a form that the press did not touch. -->
+    <form id="fake" action="thanks.html"><label>Note <input name="note" /></label> <button type="button" id="fake-send">Fake send</button></form>
+    <form id="near" action="thanks.html"><button type="button" id="other-send">Other send</button></form>
+    <form id="far" action="thanks.html"><input name="far" type="hidden" value="1" /></form>
+    <form id="real" action="thanks.html"><button id="real-send">Real send</button></form>
+    <p>Last: <output id="last">none</output></p>
+    <script>
+      const last = (text) => { document.getElementById("last").textContent = text; };
+      document.getElementById("fake-send").addEventListener("click", () => {
+        document.getElementById("fake").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      document.getElementById("other-send").addEventListener("click", () => document.getElementById("far").requestSubmit());
+      for (const id of ["fake", "near", "far", "real"]) document.getElementById(id).addEventListener("submit", (e) => { e.preventDefault(); last(`submit ${id}`); });
+    </script>
+  </body>
+</html>

@@ -61,6 +61,17 @@ try {
   const busyWait = await call("act.html", "settle", {});
   check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
 
+  // C38: only a real submit of the pressed form counts as sent.
+  const sentPage = await open("sent.html");
+  const onSent = async (label) => {
+    const snap = await call("sent.html", "snapshot");
+    const r = await call("sent.html", "act", snap.controls.find((c) => c.label === label), { op: "click" }, snap);
+    return { ok: r.ok, submitted: r.submitted ?? false, last: await sentPage.evaluate(() => document.getElementById("last").textContent) };
+  };
+  check("a submit event a page script makes is not a send", { ok: true, submitted: false, last: "submit fake" }, await onSent("Fake send"));
+  check("a send of another form than the one pressed is not a send", { ok: true, submitted: false, last: "submit far" }, await onSent("Other send"));
+  check("a real send of the pressed form is a send", { ok: true, submitted: true, last: "submit real" }, await onSent("Real send"));
+
   const rows = await open("rows.html");
   const listed = await call("rows.html", "snapshot");
   const archiveA = listed.controls.find((c) => c.label === "Archive");

@@ -152,7 +152,9 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       event.preventDefault();
       return;
     }
-    submitted = true;
+    // Only the browser's own submit of the form the op pressed is a send: a page script can
+    // dispatch a submit event, or send another form, to fake "the form was sent" (C38).
+    if (event.isTrusted && form0 && event.target === form0) submitted = true;
     if (!moved()) return;
     changed = true;
     event.preventDefault();
