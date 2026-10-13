@@ -100,10 +100,21 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   const sendsRefused: ActResult = { ok: false, reason: "submit", detail: "this control sends a form or opens a page: use click, which asks for approval" };
   if (fills && sends(e)) return sendsRefused;
 
-  // The hit-test is at the centre, so the centre must be on the screen (P13).
+  // The hit-test is at the centre, so the centre must be on the screen (P13), and inside each
+  // scrolling box around the control: a post below the shown part of a feed (P25). Only a box a
+  // person can scroll counts: `overflow: hidden` or `clip` hides the control, so it stays covered.
   const r0 = e.getBoundingClientRect();
   const cx = r0.x + r0.width / 2, cy = r0.y + r0.height / 2;
-  if (cx < 0 || cy < 0 || cx >= innerWidth || cy >= innerHeight) {
+  const clipped = () => {
+    for (let n = up(e); n && n !== document.body && n !== document.documentElement; n = up(n)) {
+      const s = getComputedStyle(n);
+      if (!/auto|scroll/.test(`${s.overflowX} ${s.overflowY}`)) continue;
+      const b = n.getBoundingClientRect();
+      if (cx < b.left || cx >= b.right || cy < b.top || cy >= b.bottom) return true;
+    }
+    return false;
+  };
+  if (cx < 0 || cy < 0 || cx >= innerWidth || cy >= innerHeight || clipped()) {
     e.scrollIntoView({ block: "center", inline: "center" });
     await new Promise((done) => setTimeout(done, 50));
   }
