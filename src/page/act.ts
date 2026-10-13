@@ -64,6 +64,18 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   // A read-only field that gets a date: a person opens its calendar and presses the day (P20).
   const calendarDay = readOnly && !native && (op === "date" || op === "type") ? toIso(value) : null;
   if ((op === "type" || op === "date") && readOnly && !calendarDay) return { ok: false, reason: "readonly" };
+  // A fill op sets only a control it may set; it never clicks a button, a link, a menu item or clickable text,
+  // whose script could send with form.submit(), which fires no submit event (C35). Those go through click.
+  const role = e.getAttribute("role") || "";
+  const box = e instanceof HTMLInputElement && (input.type === "checkbox" || input.type === "radio");
+  const settable =
+    op === "check" || op === "uncheck" ? box || /^(checkbox|radio|switch|menuitemcheckbox|menuitemradio)$/.test(role)
+    : op === "select" ? e.tagName === "SELECT" || ((e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement) && (role === "combobox" || e.getAttribute("aria-autocomplete") === "list"))
+      || (role === "option" && !!e.closest('[role="listbox"]')) || (role === "gridcell" && !!e.closest('[role="grid"],[role="treegrid"]'))
+    : op === "type" || op === "date" ? e instanceof HTMLTextAreaElement || e.isContentEditable
+      || (e instanceof HTMLInputElement && !["button", "submit", "reset", "image", "checkbox", "radio", "file", "hidden", "range", "color"].includes(input.type))
+    : true;
+  if (!settable) return { ok: false, reason: "unsupported", detail: `${op} does not set this control; use click, which asks for approval` };
   if (op === "scroll") {
     // A number scrolls the page; no value brings the control into view (P17).
     if (value.trim() && Number.isFinite(Number(value))) scrollBy({ top: Number(value), behavior: "instant" });
@@ -147,6 +159,32 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   };
   addEventListener("submit", onSubmit, true);
   addEventListener("submit", onSubmit);
+  // A click or Enter sends with the page's real functions; a fill op replaces them in the page world, so a
+  // control's own handler cannot send with form.submit(), requestSubmit() or a link's click() (C36).
+  if (cache.nav) {
+    clearTimeout(cache.nav.timer);
+    cache.nav.restore();
+    cache.nav = undefined;
+  }
+  type Proto = Record<string, unknown>;
+  const pageWorld = (window as unknown as { wrappedJSObject?: { HTMLFormElement: { prototype: Proto }; HTMLAnchorElement: { prototype: Proto } } }).wrappedJSObject;
+  const exportFn = (globalThis as unknown as { exportFunction?: (fn: () => void, target: object) => unknown }).exportFunction;
+  // The submit listener of a fill op stays with the stand-ins, so a deferred click on a submit button is cancelled too (C37).
+  const unlisten = () => {
+    removeEventListener("submit", onSubmit, true);
+    removeEventListener("submit", onSubmit);
+  };
+  if (fills) {
+    let put = () => {};
+    if (pageWorld && exportFn) {
+      const form = pageWorld.HTMLFormElement.prototype, link = pageWorld.HTMLAnchorElement.prototype;
+      const saved = { submit: form.submit, requestSubmit: form.requestSubmit, click: link.click };
+      const standIn = exportFn(() => { blocked = true; }, window);
+      form.submit = standIn; form.requestSubmit = standIn; link.click = standIn;
+      put = () => { form.submit = saved.submit; form.requestSubmit = saved.requestSubmit; link.click = saved.click; };
+    }
+    cache.nav = { restore: () => { put(); unlisten(); } };
+  }
   try {
     // A press at a point: pointer and mouse down and up, then a click unless `withClick` is false.
     const press = (at: Element, px: number, py: number, withClick = true) => {
@@ -157,14 +195,15 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       fire("pointerover", 0); fire("mouseover", 0); fire("pointermove", 0); fire("mousemove", 0);
       // A cancelled pointerdown suppresses the mouse events after it, not the click.
       const mouseEvents = fire("pointerdown", 1);
-      if (mouseEvents && fire("mousedown", 1) && at === (hit ?? e)) e.focus({ preventScroll: true });
+      if (mouseEvents && fire("mousedown", 1) && (at === e || at === hit)) e.focus({ preventScroll: true });
       fire("pointerup", 0);
       if (mouseEvents) fire("mouseup", 0);
       if (moved()) return false;
       if (withClick) fire("click", 0);
       return true;
     };
-    const click = () => press(hit ?? e, x, y);
+    // A fill presses the control itself, never what lies over it, even inside its label (C36).
+    const click = () => press(fills ? e : (hit ?? e), x, y);
     const shownNow = (n: Element) => n.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
     // The popups on the page that a field can open: a calendar, a suggestion list, a menu.
     const popups = () => [...document.querySelectorAll('dialog[open],[role="dialog"],[role="grid"],[role="listbox"],[role="menu"]')]
@@ -267,6 +306,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, want);
       e.dispatchEvent(new Event("input", { bubbles: true }));
       e.dispatchEvent(new Event("change", { bubbles: true }));
+      if (blocked) return sendsRefused;
       return input.value === want ? { ok: true, value: input.value } : { ok: false, reason: "unsupported", detail: `the field did not take ${want}` };
     }
     if (op === "click") {
@@ -288,7 +328,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       }
       if (opened().length) press(document.body, 1, 1, false);
       return blocked ? sendsRefused : { ok: true, value: typed };
-    } else if (op === "select" && /^(option|menuitem|gridcell)$/.test(e.getAttribute("role") || "")) {
+    } else if (op === "select" && /^(option|gridcell)$/.test(role)) {
       if (!click()) return refused;
     } else if (op === "select" && e.tagName !== "SELECT" && (e.getAttribute("role") === "combobox" || e.getAttribute("aria-autocomplete") === "list") &&
       (e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement)) {
@@ -368,8 +408,10 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       return refused;
     }
   } finally {
-    removeEventListener("submit", onSubmit, true);
-    removeEventListener("submit", onSubmit);
+    if (!fills) unlisten();
+    // A fill's stand-ins and submit listener stay a second for a send deferred by a timer; a click or Enter removes them first.
+    const nav = cache.nav;
+    if (nav) nav.timer = setTimeout(() => { nav.restore(); if (cache.nav === nav) cache.nav = undefined; }, 1000);
   }
   return { ok: true, submitted };
 }
