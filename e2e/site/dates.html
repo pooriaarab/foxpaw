@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dates</title>
+    <style>
+      .ui-datepicker { position: absolute; z-index: 6; background: #fff; border: 1px solid #999; padding: 4px; }
+      .ui-datepicker-title { display: inline-block; margin: 0 8px; }
+      .ui-datepicker td a { display: block; padding: 2px 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Dates</h1>
+    <!-- P19: native date and time fields. P20: a read-only field with a calendar shaped like jQuery UI's datepicker. -->
+    <p><label for="birthday">Birthday</label> <input type="date" id="birthday" /></p>
+    <p><label for="alarm">Alarm</label> <input type="time" id="alarm" /></p>
+    <p><label for="dp">Date</label> <input type="text" id="dp" readonly /></p>
+    <p><button type="button" id="send">Submit</button></p>
+    <script>
+      const NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const dp = document.getElementById("dp");
+      let shown = { y: 2016, m: 4 };
+      let div;
+      const pad = (n) => String(n).padStart(2, "0");
+      const draw = () => {
+        const { y, m } = shown;
+        const lead = new Date(y, m, 1).getDay(), days = new Date(y, m + 1, 0).getDate();
+        let cells = "";
+        for (let i = 0; i < lead; i++) cells += '<td class="ui-datepicker-other-month ui-datepicker-unselectable ui-state-disabled">&#xa0;</td>';
+        for (let d = 1; d <= days; d++) {
+          cells += '<td data-handler="selectDay" data-event="click" data-month="' + m + '" data-year="' + y + '"><a class="ui-state-default" href="#">' + d + "</a></td>";
+          if ((lead + d) % 7 === 0) cells += "</tr><tr>";
+        }
+        div.innerHTML = '<div class="ui-datepicker-header"><a class="ui-datepicker-prev" data-handler="prev" title="Prev"><span>Prev</span></a>' +
+          '<div class="ui-datepicker-title"><span class="ui-datepicker-month">' + NAMES[m] + '</span>&#xa0;<span class="ui-datepicker-year">' + y + "</span></div>" +
+          '<a class="ui-datepicker-next" data-handler="next" title="Next"><span>Next</span></a></div>' +
+          '<table class="ui-datepicker-calendar"><tbody><tr>' + cells + "</tr></tbody></table>";
+      };
+      const open = () => {
+        if (!div) {
+          div = document.createElement("div");
+          div.id = "ui-datepicker-div";
+          div.className = "ui-datepicker";
+          document.body.append(div);
+          div.addEventListener("click", (e) => {
+            const step = e.target.closest("[data-handler=prev],[data-handler=next]");
+            if (step) { shown.m += step.dataset.handler === "next" ? 1 : -1; if (shown.m > 11) { shown.m = 0; shown.y++; } if (shown.m < 0) { shown.m = 11; shown.y--; } draw(); return; }
+            const td = e.target.closest("td[data-handler=selectDay]");
+            if (!td) return;
+            e.preventDefault();
+            dp.value = pad(Number(td.dataset.month) + 1) + "/" + pad(Number(td.textContent)) + "/" + td.dataset.year;
+            div.style.display = "none";
+          });
+        }
+        const r = dp.getBoundingClientRect();
+        div.style.left = r.left + "px";
+        div.style.top = r.bottom + scrollY + "px";
+        div.style.display = "block";
+        draw();
+      };
+      dp.addEventListener("focus", open);
+      dp.addEventListener("click", open);
+    </script>
+  </body>
+</html>
