@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Clicks</title>
+    <style>
+      .alink { text-decoration: underline; color: blue; cursor: pointer; }
+      #tree li { cursor: pointer; }
+      .card, .long, label { cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Clicks</h1>
+    <!-- P21: text a script makes clickable, like MiniWoB's click-link and navigate-tree. -->
+    <div id="area"><span class="alink">Est</span> nisl imperdiet <span class="alink">dictum</span> velit. <span>Plain words</span></div>
+    <ul id="tree"><li><span class="folder">Lyda</span><ul style="display: none"><li><span class="file">Sergio</span></li></ul></li><li><span class="file">Vina</span></li></ul>
+    <div class="card"><a href="#top">Card link</a> Card words</div>
+    <p class="long">This paragraph shows a pointer but holds far too much text to be one thing that a person would click on.</p>
+    <label><input type="checkbox" /> Remember me</label>
+    <p>Clicked: <output id="clicked">none</output></p>
+    <script>
+      for (const el of document.querySelectorAll(".alink, #tree span")) el.addEventListener("click", (e) => {
+        document.getElementById("clicked").textContent = e.target.textContent;
+        const sub = e.target.parentElement.querySelector("ul");
+        if (sub) sub.style.display = sub.style.display === "none" ? "block" : "none";
+      });
+    </script>
+  </body>
+</html>
