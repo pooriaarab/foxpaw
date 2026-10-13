@@ -61,7 +61,7 @@ try {
   const busyWait = await call("act.html", "settle", {});
   check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
 
-  // C38: only a real submit of the pressed form counts as sent. P25: a control in a scrolling box is scrolled to.
+  // C38: only a real submit of the pressed form counts as sent. P25: a control in a scrolling box is scrolled to. P26: a wrapped link.
   const sentPage = await open("sent.html");
   const onSent = async (label) => {
     const snap = await call("sent.html", "snapshot");
@@ -77,6 +77,9 @@ try {
   check("a control a hidden box hides is not clicked", { ok: false, reason: "covered", last: "deep", scrolled: 0 },
     { ok: hidden.ok, reason: hidden.reason, last: await sentPage.evaluate(() => document.getElementById("last").textContent), scrolled: await sentPage.evaluate(() => document.getElementById("strip").scrollLeft) });
   check("the shown control in a hidden box is clicked", { ok: true, submitted: false, last: "cancel" }, await onSent("Cancel"));
+  // P26: the shop-signin-handoff product link on Ichabod's 1366 px window.
+  check("a link that wraps over two lines is clicked", { ok: true, submitted: false, last: "wrapped", lines: 2 },
+    { ...(await onSent("Hiking Socks (2 pairs)")), lines: await sentPage.evaluate(() => document.getElementById("wrap").getClientRects().length) });
 
   const rows = await open("rows.html");
   const listed = await call("rows.html", "snapshot");
