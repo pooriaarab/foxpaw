@@ -3,6 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <title>Sent</title>
+    <style>#box { height: 60px; overflow-y: scroll; border: 1px solid #999; } #box p { height: 30px; margin: 0; }
+      #strip { width: 300px; height: 40px; overflow: hidden; white-space: nowrap; border: 1px solid #999; } #strip button { margin-right: 320px; }</style>
   </head>
   <body>
     <h1>Sent</h1>
@@ -11,6 +13,10 @@
     <form id="near" action="thanks.html"><button type="button" id="other-send">Other send</button></form>
     <form id="far" action="thanks.html"><input name="far" type="hidden" value="1" /></form>
     <form id="real" action="thanks.html"><button id="real-send">Real send</button></form>
+    <!-- P25: a control inside a scrolling box, below the part of the box that shows. -->
+    <div id="box"><p>One</p><p>Two</p><p>Three</p><p>Four</p><p><button type="button" id="deep">Deep button</button></p></div>
+    <!-- P25: a box with overflow: hidden. A person sees only Cancel; Delete account sits past its right edge. -->
+    <div id="strip"><button type="button" id="cancel">Cancel</button><button type="button" id="delete">Delete account</button></div>
     <p>Last: <output id="last">none</output></p>
     <script>
       const last = (text) => { document.getElementById("last").textContent = text; };
@@ -19,6 +25,9 @@
       });
       document.getElementById("other-send").addEventListener("click", () => document.getElementById("far").requestSubmit());
       for (const id of ["fake", "near", "far", "real"]) document.getElementById(id).addEventListener("submit", (e) => { e.preventDefault(); last(`submit ${id}`); });
+      document.getElementById("cancel").addEventListener("click", () => last("cancel"));
+      document.getElementById("delete").addEventListener("click", () => last("delete"));
+      document.getElementById("deep").addEventListener("click", () => last("deep"));
     </script>
   </body>
 </html>

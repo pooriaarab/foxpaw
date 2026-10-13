@@ -61,7 +61,7 @@ try {
   const busyWait = await call("act.html", "settle", {});
   check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
 
-  // C38: only a real submit of the pressed form counts as sent.
+  // C38: only a real submit of the pressed form counts as sent. P25: a control in a scrolling box is scrolled to.
   const sentPage = await open("sent.html");
   const onSent = async (label) => {
     const snap = await call("sent.html", "snapshot");
@@ -71,6 +71,12 @@ try {
   check("a submit event a page script makes is not a send", { ok: true, submitted: false, last: "submit fake" }, await onSent("Fake send"));
   check("a send of another form than the one pressed is not a send", { ok: true, submitted: false, last: "submit far" }, await onSent("Other send"));
   check("a real send of the pressed form is a send", { ok: true, submitted: true, last: "submit real" }, await onSent("Real send"));
+  check("a control below the shown part of a scrolling box is clicked", { ok: true, submitted: false, last: "deep" }, await onSent("Deep button"));
+  const strip = await call("sent.html", "snapshot");
+  const hidden = await call("sent.html", "act", strip.controls.find((c) => c.label === "Delete account"), { op: "click" }, strip);
+  check("a control a hidden box hides is not clicked", { ok: false, reason: "covered", last: "deep", scrolled: 0 },
+    { ok: hidden.ok, reason: hidden.reason, last: await sentPage.evaluate(() => document.getElementById("last").textContent), scrolled: await sentPage.evaluate(() => document.getElementById("strip").scrollLeft) });
+  check("the shown control in a hidden box is clicked", { ok: true, submitted: false, last: "cancel" }, await onSent("Cancel"));
 
   const rows = await open("rows.html");
   const listed = await call("rows.html", "snapshot");
