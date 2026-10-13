@@ -119,6 +119,26 @@ try {
   check("scroll with no value brings the control into view", true,
     await picker.evaluate(() => { const r = document.getElementById("far").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
 
+  // Native date and time fields (P19), and a read-only field with a jQuery UI style calendar (P20).
+  const dates = await open("dates.html");
+  const onDates = async (label, request) => {
+    const snap = await call("dates.html", "snapshot");
+    return call("dates.html", "act", snap.controls.find((c) => c.label === label), request, snap);
+  };
+  const fieldValue = (id) => dates.evaluate((i) => document.getElementById(i).value, id);
+  const usDate = await onDates("Birthday", { op: "type", value: "11/08/2019" });
+  check("a native date field takes a US date", { ok: true, value: "2019-11-08" }, { ok: usDate.ok, value: await fieldValue("birthday") });
+  const morning = await onDates("Alarm", { op: "type", value: "10:57 a.m." });
+  const evening = await onDates("Alarm", { op: "date", value: "2:05 PM" });
+  check("a native time field takes a.m./p.m. time", { ok: [true, true], value: "14:05" }, { ok: [morning.ok, evening.ok], value: await fieldValue("alarm") });
+  const notDate = await onDates("Birthday", { op: "type", value: "next Tuesday" });
+  check("a value a native field refuses fails", { ok: false, reason: "unsupported", value: "2019-11-08" }, { ok: notDate.ok, reason: notDate.reason, value: await fieldValue("birthday") });
+  const dayPicked = await onDates("Date", { op: "date", value: "2016-07-30" });
+  check("date on a read-only field picks the day in its calendar", { ok: true, value: "07/30/2016", open: false },
+    { ok: dayPicked.ok, value: await fieldValue("dp"), open: await dates.evaluate(() => document.getElementById("ui-datepicker-div")?.style.display === "block") });
+  const earlier = await onDates("Date", { op: "type", value: "03/02/2016" });
+  check("the calendar pages back to an earlier month", { ok: true, value: "03/02/2016" }, { ok: earlier.ok, value: await fieldValue("dp") });
+
   // A fill never sends (C34): select and check refuse a control that sends a form or opens a page.
   const sendsPage = await open("sends.html");
   const onSends = async (label, request) => {
