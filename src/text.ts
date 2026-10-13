@@ -37,12 +37,15 @@ const MASK = "•••";
 
 /** One control as one line, for example `[0:6] textbox "Email" value="sam@example.com" (required)`. */
 function line(c: Control): string {
-  const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", c.expanded && "expanded",
+  // A closed folder reads collapsed; an ARIA control that is closed reads as before, so menus cost no tokens (T14).
+  const open = c.expanded ? "expanded" : c.list && c.expanded === false && "collapsed";
+  const flags = [c.required && "required", c.disabled && "disabled", c.checked && "checked", open,
     c.submit && "sends the form"].filter(Boolean);
   const options = c.options?.length ? ` options=[${c.options.map((o) => quote(o.value)).join(",")}]` : "";
   // A checkbox or a radio is checked by its id; its form value is noise (T11).
   const value = c.secret ? (c.value ? ` value="${MASK}"` : "") : c.value && c.value !== c.label && c.role !== "checkbox" && c.role !== "radio" ? ` value=${quote(c.value)}` : "";
-  return `[${c.id}] ${c.role} ${quote(c.label)}${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
+  const near = c.near ? ` near ${quote(c.near)}` : "";
+  return `[${c.id}] ${c.role} ${quote(c.label)}${near}${value}${options}${flags.length ? ` (${flags.join(", ")})` : ""}`;
 }
 
 const foldLine = (run: Control[]) => `(${run.length} links: ${run.map((c) => `${quote(c.label)}=${c.id}`).join(", ")})`;
