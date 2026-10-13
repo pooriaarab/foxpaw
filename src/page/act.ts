@@ -103,8 +103,17 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   // The hit-test is at the centre, so the centre must be on the screen (P13), and inside each
   // scrolling box around the control: a post below the shown part of a feed (P25). Only a box a
   // person can scroll counts: `overflow: hidden` or `clip` hides the control, so it stays covered.
-  const r0 = e.getBoundingClientRect();
-  const cx = r0.x + r0.width / 2, cy = r0.y + r0.height / 2;
+  // A control that wraps over lines, such as a long link in a narrow card, has a box whose centre
+  // can sit between its lines, on its parent: the hit-test then takes the centre of its widest line (P26).
+  const centre = (): [number, number] => {
+    const b = e.getBoundingClientRect();
+    const x = b.x + b.width / 2, y = b.y + b.height / 2;
+    const lines = [...e.getClientRects()].filter((q) => q.width > 0 && q.height > 0);
+    if (lines.length < 2 || lines.some((q) => x >= q.left && x < q.right && y >= q.top && y < q.bottom)) return [x, y];
+    const wide = lines.reduce((a, q) => (q.width > a.width ? q : a));
+    return [wide.x + wide.width / 2, wide.y + wide.height / 2];
+  };
+  const [cx, cy] = centre();
   const clipped = () => {
     for (let n = up(e); n && n !== document.body && n !== document.documentElement; n = up(n)) {
       const s = getComputedStyle(n);
@@ -119,7 +128,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
     await new Promise((done) => setTimeout(done, 50));
   }
   const r = e.getBoundingClientRect();
-  const x = r.x + r.width / 2, y = r.y + r.height / 2;
+  const [x, y] = centre();
   // The control must be the top element at its centre, or hold it.
   let hit = document.elementFromPoint(x, y);
   while (hit?.shadowRoot) {
