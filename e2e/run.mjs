@@ -7,6 +7,9 @@ import { launch, serve, writeArtifact } from "create-foxkit/e2e";
 const record = { startedAt: new Date().toISOString(), checks: [] };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
 
+/** The folder state of the clicks.html tree (P22). */
+const treeState = (snap) => Object.fromEntries(snap.controls.filter((c) => /^(Lyda|Sergio|Vina)$/.test(c.label)).map((c) => [c.label, c.expanded ?? null]));
+
 const site = await serve("e2e/site");
 let fox;
 try {
@@ -148,6 +151,31 @@ try {
   check("a clickable span is read as a button and clicked", { labels: ["button Est", "button dictum", "button Lyda", "button Vina"], ok: true, clicked: "Est" },
     { labels: clickLabels.filter((l) => /Est|dictum|Lyda|Vina|Sergio/.test(l)), ok: estClick.ok, clicked: await clicks.evaluate(() => document.getElementById("clicked").textContent) });
   check("clickable text needs its own short text and no control inside", [], clickLabels.filter((l) => /Plain|Card words|paragraph|^button Remember/.test(l)));
+  // A folder is a list item with its own child list (P22).
+  const closedTree = treeState(clickSnap);
+  const lyda = clickSnap.controls.find((c) => c.label === "Lyda");
+  if (lyda) await call("clicks.html", "act", lyda, { op: "click" }, clickSnap);
+  check("a folder reads collapsed, then expanded, and a file reads neither", { closed: { Lyda: false, Vina: null }, open: { Lyda: true, Sergio: null, Vina: null } },
+    { closed: closedTree, open: treeState(await call("clicks.html", "snapshot")) });
+
+  // Icons a script makes clickable (P23), and controls with one name (P24).
+  const icons = await open("icons.html");
+  const iconSnap = await call("icons.html", "snapshot");
+  const iconLabels = iconSnap.controls.map((c) => `${c.role} ${c.label}`);
+  const iconSend = iconSnap.controls.find((c) => c.label === "send forward");
+  const iconSent = iconSend ? await call("icons.html", "act", iconSend, { op: "click" }, iconSnap) : { ok: false };
+  const iconSentText = await icons.evaluate(() => document.getElementById("clicked").textContent);
+  const iconMore = iconSnap.controls.find((c) => c.label === "more" && c.near?.includes("nieves"));
+  if (iconMore) await call("icons.html", "act", iconMore, { op: "click" }, iconSnap);
+  const iconMenu = await call("icons.html", "snapshot");
+  const iconEmbed = iconMenu.controls.find((c) => c.label === "Embed Tweet");
+  const embedClick = iconEmbed ? await call("icons.html", "act", iconEmbed, { op: "click" }, iconMenu) : { ok: false };
+  check("an icon a script makes clickable is read as a named button and clicked",
+    { labels: ["button reply", "button like", "button more", "button reply", "button like", "button more", "button send forward", "button Delete"], sent: [true, "send-forward"], embed: [true, "embed Odelinda"] },
+    { labels: iconLabels.filter((l) => /reply|like|more|send|Delete/.test(l)), sent: [iconSent.ok, iconSentText], embed: [embedClick.ok, await icons.evaluate(() => document.getElementById("clicked").textContent)] });
+  check("an icon needs a pointer, a name and a small box", [], iconLabels.filter((l) => /deco|hero|banner|icon|i2/.test(l)));
+  check("controls with one name carry the text of their card", { like: ["Karla @bernardine", "Odelinda @nieves"], send: null },
+    { like: iconSnap.controls.filter((c) => c.label === "like").map((c) => c.near ?? null), send: iconSend?.near ?? null });
 
   // A fill never sends (C34): select and check refuse a control that sends a form or opens a page (a menu item and a
   // toggle button are refused before that, as controls a fill does not set: C35).

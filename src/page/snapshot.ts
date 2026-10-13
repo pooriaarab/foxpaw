@@ -19,7 +19,7 @@ export interface FrameRead {
     checked?: boolean; expanded?: boolean; disabled: boolean; readOnly: boolean; required: boolean;
     offscreen: boolean; form?: number; submit: boolean; action?: string; firstAction?: string; dialog: boolean; popupFor?: number;
     autocomplete: boolean; picker: boolean; dateFormat?: string; secret: boolean; guard: string;
-    href?: string; row?: string;
+    href?: string; row?: string; near?: string; list?: boolean;
   }[];
 }
 
@@ -133,11 +133,70 @@ export function readFrame(): FrameRead | null {
   // Text a script makes clickable (P21): its own short text, a pointer cursor, no control in or around it.
   const pointerBody = getComputedStyle(document.body).cursor === "pointer";
   const ownText = (e: Element) => [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" ").replace(/\s+/g, " ").trim();
+  // Same-origin `:hover` rules that show a pointer, without the `:hover` (P23). A cross-origin sheet throws and is skipped.
+  const hoverPointers: string[] = [];
+  const hoverRules = (rules: CSSRuleList, depth: number) => {
+    for (const rule of rules) {
+      if (hoverPointers.length >= 200) return;
+      const nested = (rule as CSSGroupingRule).cssRules;
+      if (nested && depth < 3) hoverRules(nested, depth + 1);
+      const style = rule as CSSStyleRule;
+      if (!style.selectorText?.includes(":hover") || style.style?.cursor !== "pointer") continue;
+      for (const part of style.selectorText.split(",")) {
+        const base = part.includes(":hover") ? part.replace(/:hover/g, "").trim() : "";
+        try {
+          if (base) { document.querySelector(base); hoverPointers.push(base); }
+        } catch { /* not a selector without :hover */ }
+      }
+    }
+  };
+  if (!pointerBody) for (const sheet of document.styleSheets) {
+    try { hoverRules(sheet.cssRules, 0); } catch { /* cross-origin */ }
+  }
+  // The elements those rules match, found once per read: a matches() per element and rule is too slow on a big page.
+  const hovered = new Set<Element>();
+  for (const s of hoverPointers) for (const e of document.querySelectorAll(s)) if (hovered.size < 5000) hovered.add(e);
+  const pointer = (e: Element) => getComputedStyle(e).cursor === "pointer" || hovered.has(e) || (!!e.parentElement && hovered.has(e.parentElement));
+  // An icon a script makes clickable (P23): no text, an image, a small box, a pointer, and a name.
+  const GENERIC = new Set(["icon", "icons", "ico", "btn", "button", "fa", "fas", "far", "fab", "fal", "glyphicon", "material", "symbols",
+    "outlined", "svg", "img", "image", "pull", "right", "left", "float", "active", "hover", "small", "large", "sm", "lg", "md", "xs", "js", "ui",
+    "item", "el", "wrap", "wrapper", "inner", "outer", "control", "controls", "action", "actions", "link", "span", "div", "is", "has"]);
+  const iconName = (e: Element): string => {
+    const own = e.getAttribute("aria-label") || e.getAttribute("title") || e.getAttribute("alt");
+    if (own?.trim()) return own.trim();
+    const inner = e.querySelector("img[alt],svg title,[aria-label],[title]");
+    const named = inner && (inner.tagName.toLowerCase() === "title" ? inner.textContent : inner.getAttribute("alt") || inner.getAttribute("aria-label") || inner.getAttribute("title"));
+    if (named?.trim()) return named.trim();
+    const words = `${e.id} ${e.getAttribute("class") || ""}`.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().split(/[\s_-]+/)
+      .filter((w) => /^[a-z]{2,15}$/.test(w) && !GENERIC.has(w));
+    return [...new Set(words)].slice(0, 4).join(" ");
+  };
+  const picture = (e: Element) => {
+    if (e.tagName === "IMG" || e.querySelector("img,svg")) return true;
+    const style = getComputedStyle(e);
+    return /url\(/.test(style.content) || /url\(/.test(style.backgroundImage) || !/^(none|normal|)$/.test(getComputedStyle(e, "::before").content);
+  };
+  const icon = (e: Element): boolean => {
+    if (pointerBody || !(e instanceof HTMLElement) || /^(BODY|HTML|LABEL|INPUT|OPTION|SELECT|TEXTAREA|BUTTON|A)$/.test(e.tagName)) return false;
+    if ((e.textContent || "").trim() || e.childElementCount > 3) return false;
+    const r = e.getBoundingClientRect();
+    if (r.width > 96 || r.height > 96 || !picture(e) || !pointer(e)) return false;
+    return !e.querySelector(selector) && !e.parentElement?.closest(`${selector},label`) && !!iconName(e);
+  };
   const clickable = (e: Element): boolean => {
     if (pointerBody || !(e instanceof HTMLElement) || /^(BODY|HTML|LABEL|INPUT|OPTION)$/.test(e.tagName)) return false;
     const text = ownText(e);
-    if (!text || text.length > 80 || getComputedStyle(e).cursor !== "pointer") return false;
+    if (!text) return icon(e);
+    if (text.length > 80 || !pointer(e)) return false;
     return !e.querySelector(selector) && !e.parentElement?.closest(`${selector},label`);
+  };
+  // A list item that holds its own child list: the control at its top opens and closes that list (P22).
+  const disclosure = (e: Element): boolean | undefined => {
+    const item = e.parentElement;
+    if (!item?.matches('li,[role="treeitem"]')) return undefined;
+    const list = [...item.children].find((c) => c !== e && c.matches('ul,ol,[role="group"]'));
+    if (!list?.childElementCount) return undefined;
+    return list.checkVisibility({ checkVisibilityCSS: true });
   };
   const state = (e: Element): boolean | undefined => {
     if (e.tagName === "INPUT" && ["checkbox", "radio"].includes(f(e).type)) return f(e).checked;
@@ -203,6 +262,7 @@ export function readFrame(): FrameRead | null {
     return /\b(?:DD|MM|YYYY)[./-](?:DD|MM)[./-](?:YYYY|DD)\b/.exec(hint)?.[0];
   };
   const controls: FrameRead["controls"] = [];
+  const read: Element[] = [];
   // Clickable text joins the controls in page order; a page with none reads as before (P21).
   const clicks: Element[] = [];
   const looked = new Set<Element>();
@@ -212,6 +272,16 @@ export function readFrame(): FrameRead | null {
     if (!parent || looked.has(parent) || !n.textContent?.trim()) continue;
     looked.add(parent);
     if (!parent.matches(selector) && clickable(parent) && visible(parent)) clicks.push(parent);
+  }
+  // Icons have no text node: look at the elements with no text (P23).
+  if (!pointerBody) {
+    let seen = 0;
+    for (const e of document.body.querySelectorAll("*")) {
+      if (clicks.length >= 60 || seen >= 4000) break;
+      seen++;
+      if (e.childElementCount > 3 || e.matches(selector) || (e.textContent || "").trim() || e.closest("script,style,noscript,template,svg")) continue;
+      if (icon(e) && visible(e)) clicks.push(e);
+    }
   }
   const inOrder = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
   const found = clicks.length ? [...new Set([...deep(document, selector), ...clicks])].toSorted(inOrder) : [...new Set(deep(document, selector))];
@@ -230,12 +300,13 @@ export function readFrame(): FrameRead | null {
     if (!first.has(e)) first.set(e, to);
     controls.push({
       node: identity(e), role: rname, tag: e.tagName.toLowerCase(), type: e.tagName === "INPUT" ? f(e).type : "",
-      label: name(e).slice(0, 200), name: e.getAttribute("name") || "", placeholder: e.getAttribute("placeholder") || "",
+      label: (name(e) || (icon(e) ? iconName(e) : "")).slice(0, 200), name: e.getAttribute("name") || "", placeholder: e.getAttribute("placeholder") || "",
       section: section(e), value: shown(e).slice(0, 500),
       options: e.tagName === "SELECT"
         ? [...f(e).options].filter((o) => !o.disabled).map((o) => ({ value: o.value, label: o.label.trim(), selected: o.selected }))
         : undefined,
-      checked: state(e), expanded: e.hasAttribute("aria-expanded") ? e.getAttribute("aria-expanded") === "true" : undefined,
+      checked: state(e), expanded: e.hasAttribute("aria-expanded") ? e.getAttribute("aria-expanded") === "true" : disclosure(e),
+      ...(!e.hasAttribute("aria-expanded") && disclosure(e) !== undefined ? { list: true } : {}),
       disabled: disabled(e), readOnly: !!f(e).readOnly || e.getAttribute("aria-readonly") === "true",
       required: !!f(e).required || e.getAttribute("aria-required") === "true",
       offscreen, form: form ? identity(form) : undefined,
@@ -250,7 +321,25 @@ export function readFrame(): FrameRead | null {
       ...(rname === "link" && e.getAttribute("href") ? { href: e.getAttribute("href")! } : {}),
       ...(inRow(e) ? { row: rowHash(e) } : {}),
     });
+    read.push(e);
     if (controls.length >= 300) break;
+  }
+  // Controls that share one name carry the first line of their card's text, when the cards differ (P24).
+  const byLabel = new Map<string, number[]>();
+  const FIELD_ROLES = new Set(["textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "spinbutton"]);
+  controls.forEach((c, i) => { if (c.label && c.role !== "link" && !FIELD_ROLES.has(c.role)) byLabel.set(c.label, [...(byLabel.get(c.label) ?? []), i]); });
+  const near = (e: Element, label: string): string => {
+    for (let p = e.parentElement, depth = 0; p && p !== document.body && depth < 6; p = p.parentElement, depth++) {
+      const line = (p as HTMLElement).innerText?.split("\n").map((l) => l.replace(/\s+/g, " ").trim()).find((l) => l && l !== label);
+      if (line) return line.slice(0, 40);
+    }
+    return "";
+  };
+  for (const [label, at] of byLabel) {
+    if (at.length < 2 || at.length > 20) continue;
+    const cards = at.map((i) => near(read[i]!, label));
+    if (new Set(cards).size < 2) continue;
+    at.forEach((i, k) => { if (cards[k]) controls[i]!.near = cards[k]; });
   }
 
   const words: string[] = [];
