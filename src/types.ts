@@ -58,6 +58,10 @@ export interface Control {
   href?: string;
   /** A short hash of the text of the row, list item or card around the control. Absent outside one. */
   row?: string;
+  /** The first line of the card around it, when other controls share its label and sit in other cards (P24). */
+  near?: string;
+  /** It opens and closes its own child list, as a folder in a tree does; `expanded` says whether the list shows (P22). */
+  list?: boolean;
 }
 
 /** The state of one frame when it was read. */
