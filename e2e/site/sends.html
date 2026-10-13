@@ -22,6 +22,9 @@
       <label style="position: relative; display: inline-block">Covered box <input type="checkbox" /><button type="button" onclick="document.getElementById('order').submit()" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0.01">cover</button></label>
       <div role="checkbox" aria-checked="false" onclick="setTimeout(() => document.getElementById('order').submit(), 50)">Later box</div>
       <div role="checkbox" aria-checked="false" onclick="document.getElementById('away').click()">Link box</div>
+      <label>Timer box <input type="checkbox" onclick="setTimeout(() => document.getElementById('realsend').click(), 0)" /></label>
+      <label>Send date <input type="date" onchange="this.form.submit()" /></label>
+      <button id="realsend">Real send</button>
     </form>
     <div role="listbox" aria-label="Pages">
       <a role="option" href="thanks.html?via=option">Link option</a>

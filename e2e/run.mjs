@@ -187,6 +187,20 @@ try {
   check("a fill blocks form.submit(), requestSubmit() and a link click from a control's own handler",
     { url: true, sent: true, results: ["Auto plan:submit", "Auto box:submit", "Covered box:ok", "Link box:submit"] },
     { url: ownedUrl, sent: true, results: owned.slice(0, 4) });
+  // C37: a deferred click on a submit button after a fill op, and a send from a native date field's change handler.
+  const deferred = [];
+  for (const [label, op, value] of [["Timer box", "check"], ["Send date", "date", "2026-10-20"]]) {
+    const snap = await call("sends.html", "snapshot").catch(() => null);
+    const target = snap?.controls.find((c) => c.label.startsWith(label));
+    const r = target ? await call("sends.html", "act", target, { op, ...(value ? { value } : {}) }, snap).catch(() => ({ ok: false, reason: "page gone" })) : { ok: false, reason: "not found" };
+    deferred.push(`${label}:${r.ok ? "ok" : r.reason}`);
+    await new Promise((done) => setTimeout(done, 400));
+  }
+  const deferredUrl = sendsPage.url().endsWith("/sends.html");
+  const deferredSent = deferredUrl ? await sendsPage.evaluate(() => document.getElementById("sent").textContent) : "navigated";
+  if (!deferredUrl) await sendsPage.goto(`${site.url}/sends.html`);
+  check("a fill blocks a deferred click on a submit button and a send from a native date field",
+    { results: ["Timer box:ok", "Send date:submit"], url: true, sent: "0" }, { results: deferred, url: deferredUrl, sent: deferredSent });
   const outside = await onSends("Outside option", { op: "select" });
   check("a fill still picks an option that sends nothing", { outside: true, picked: "outside" },
     { outside: outside.ok, picked: await sendsPage.evaluate(() => document.getElementById("picked").textContent) });

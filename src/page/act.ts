@@ -169,12 +169,21 @@ export async function perform(node: number, request: ActRequest, expect: { guard
   type Proto = Record<string, unknown>;
   const pageWorld = (window as unknown as { wrappedJSObject?: { HTMLFormElement: { prototype: Proto }; HTMLAnchorElement: { prototype: Proto } } }).wrappedJSObject;
   const exportFn = (globalThis as unknown as { exportFunction?: (fn: () => void, target: object) => unknown }).exportFunction;
-  if (fills && pageWorld && exportFn) {
-    const form = pageWorld.HTMLFormElement.prototype, link = pageWorld.HTMLAnchorElement.prototype;
-    const saved = { submit: form.submit, requestSubmit: form.requestSubmit, click: link.click };
-    const standIn = exportFn(() => { blocked = true; }, window);
-    form.submit = standIn; form.requestSubmit = standIn; link.click = standIn;
-    cache.nav = { restore: () => { form.submit = saved.submit; form.requestSubmit = saved.requestSubmit; link.click = saved.click; } };
+  // The submit listener of a fill op stays with the stand-ins, so a deferred click on a submit button is cancelled too (C37).
+  const unlisten = () => {
+    removeEventListener("submit", onSubmit, true);
+    removeEventListener("submit", onSubmit);
+  };
+  if (fills) {
+    let put = () => {};
+    if (pageWorld && exportFn) {
+      const form = pageWorld.HTMLFormElement.prototype, link = pageWorld.HTMLAnchorElement.prototype;
+      const saved = { submit: form.submit, requestSubmit: form.requestSubmit, click: link.click };
+      const standIn = exportFn(() => { blocked = true; }, window);
+      form.submit = standIn; form.requestSubmit = standIn; link.click = standIn;
+      put = () => { form.submit = saved.submit; form.requestSubmit = saved.requestSubmit; link.click = saved.click; };
+    }
+    cache.nav = { restore: () => { put(); unlisten(); } };
   }
   try {
     // A press at a point: pointer and mouse down and up, then a click unless `withClick` is false.
@@ -297,6 +306,7 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(e, want);
       e.dispatchEvent(new Event("input", { bubbles: true }));
       e.dispatchEvent(new Event("change", { bubbles: true }));
+      if (blocked) return sendsRefused;
       return input.value === want ? { ok: true, value: input.value } : { ok: false, reason: "unsupported", detail: `the field did not take ${want}` };
     }
     if (op === "click") {
@@ -398,9 +408,8 @@ export async function perform(node: number, request: ActRequest, expect: { guard
       return refused;
     }
   } finally {
-    removeEventListener("submit", onSubmit, true);
-    removeEventListener("submit", onSubmit);
-    // The stand-ins stay a second for a send deferred by a timer; a click or Enter puts the real ones back first.
+    if (!fills) unlisten();
+    // A fill's stand-ins and submit listener stay a second for a send deferred by a timer; a click or Enter removes them first.
     const nav = cache.nav;
     if (nav) nav.timer = setTimeout(() => { nav.restore(); if (cache.nav === nav) cache.nav = undefined; }, 1000);
   }
