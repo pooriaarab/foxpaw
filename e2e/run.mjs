@@ -7,6 +7,9 @@ import { launch, serve, writeArtifact } from "create-foxkit/e2e";
 const record = { startedAt: new Date().toISOString(), checks: [] };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
 
+/** The folder state of the clicks.html tree (P22). */
+const treeState = (snap) => Object.fromEntries(snap.controls.filter((c) => /^(Lyda|Sergio|Vina)$/.test(c.label)).map((c) => [c.label, c.expanded ?? null]));
+
 const site = await serve("e2e/site");
 let fox;
 try {
@@ -57,6 +60,26 @@ try {
   await page.evaluate("window.tick()");
   const busyWait = await call("act.html", "settle", {});
   check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
+
+  // C38: only a real submit of the pressed form counts as sent. P25: a control in a scrolling box is scrolled to. P26: a wrapped link.
+  const sentPage = await open("sent.html");
+  const onSent = async (label) => {
+    const snap = await call("sent.html", "snapshot");
+    const r = await call("sent.html", "act", snap.controls.find((c) => c.label === label), { op: "click" }, snap);
+    return { ok: r.ok, submitted: r.submitted ?? false, last: await sentPage.evaluate(() => document.getElementById("last").textContent) };
+  };
+  check("a submit event a page script makes is not a send", { ok: true, submitted: false, last: "submit fake" }, await onSent("Fake send"));
+  check("a send of another form than the one pressed is not a send", { ok: true, submitted: false, last: "submit far" }, await onSent("Other send"));
+  check("a real send of the pressed form is a send", { ok: true, submitted: true, last: "submit real" }, await onSent("Real send"));
+  check("a control below the shown part of a scrolling box is clicked", { ok: true, submitted: false, last: "deep" }, await onSent("Deep button"));
+  const strip = await call("sent.html", "snapshot");
+  const hidden = await call("sent.html", "act", strip.controls.find((c) => c.label === "Delete account"), { op: "click" }, strip);
+  check("a control a hidden box hides is not clicked", { ok: false, reason: "covered", last: "deep", scrolled: 0 },
+    { ok: hidden.ok, reason: hidden.reason, last: await sentPage.evaluate(() => document.getElementById("last").textContent), scrolled: await sentPage.evaluate(() => document.getElementById("strip").scrollLeft) });
+  check("the shown control in a hidden box is clicked", { ok: true, submitted: false, last: "cancel" }, await onSent("Cancel"));
+  // P26: the shop-signin-handoff product link on Ichabod's 1366 px window.
+  check("a link that wraps over two lines is clicked", { ok: true, submitted: false, last: "wrapped", lines: 2 },
+    { ...(await onSent("Hiking Socks (2 pairs)")), lines: await sentPage.evaluate(() => document.getElementById("wrap").getClientRects().length) });
 
   const rows = await open("rows.html");
   const listed = await call("rows.html", "snapshot");
@@ -148,6 +171,31 @@ try {
   check("a clickable span is read as a button and clicked", { labels: ["button Est", "button dictum", "button Lyda", "button Vina"], ok: true, clicked: "Est" },
     { labels: clickLabels.filter((l) => /Est|dictum|Lyda|Vina|Sergio/.test(l)), ok: estClick.ok, clicked: await clicks.evaluate(() => document.getElementById("clicked").textContent) });
   check("clickable text needs its own short text and no control inside", [], clickLabels.filter((l) => /Plain|Card words|paragraph|^button Remember/.test(l)));
+  // A folder is a list item with its own child list (P22).
+  const closedTree = treeState(clickSnap);
+  const lyda = clickSnap.controls.find((c) => c.label === "Lyda");
+  if (lyda) await call("clicks.html", "act", lyda, { op: "click" }, clickSnap);
+  check("a folder reads collapsed, then expanded, and a file reads neither", { closed: { Lyda: false, Vina: null }, open: { Lyda: true, Sergio: null, Vina: null } },
+    { closed: closedTree, open: treeState(await call("clicks.html", "snapshot")) });
+
+  // Icons a script makes clickable (P23), and controls with one name (P24).
+  const icons = await open("icons.html");
+  const iconSnap = await call("icons.html", "snapshot");
+  const iconLabels = iconSnap.controls.map((c) => `${c.role} ${c.label}`);
+  const iconSend = iconSnap.controls.find((c) => c.label === "send forward");
+  const iconSent = iconSend ? await call("icons.html", "act", iconSend, { op: "click" }, iconSnap) : { ok: false };
+  const iconSentText = await icons.evaluate(() => document.getElementById("clicked").textContent);
+  const iconMore = iconSnap.controls.find((c) => c.label === "more" && c.near?.includes("nieves"));
+  if (iconMore) await call("icons.html", "act", iconMore, { op: "click" }, iconSnap);
+  const iconMenu = await call("icons.html", "snapshot");
+  const iconEmbed = iconMenu.controls.find((c) => c.label === "Embed Tweet");
+  const embedClick = iconEmbed ? await call("icons.html", "act", iconEmbed, { op: "click" }, iconMenu) : { ok: false };
+  check("an icon a script makes clickable is read as a named button and clicked",
+    { labels: ["button reply", "button like", "button more", "button reply", "button like", "button more", "button send forward", "button Delete"], sent: [true, "send-forward"], embed: [true, "embed Odelinda"] },
+    { labels: iconLabels.filter((l) => /reply|like|more|send|Delete/.test(l)), sent: [iconSent.ok, iconSentText], embed: [embedClick.ok, await icons.evaluate(() => document.getElementById("clicked").textContent)] });
+  check("an icon needs a pointer, a name and a small box", [], iconLabels.filter((l) => /deco|hero|banner|icon|i2/.test(l)));
+  check("controls with one name carry the text of their card", { like: ["Karla @bernardine", "Odelinda @nieves"], send: null },
+    { like: iconSnap.controls.filter((c) => c.label === "like").map((c) => c.near ?? null), send: iconSend?.near ?? null });
 
   // A fill never sends (C34): select and check refuse a control that sends a form or opens a page (a menu item and a
   // toggle button are refused before that, as controls a fill does not set: C35).

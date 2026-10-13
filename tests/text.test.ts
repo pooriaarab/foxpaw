@@ -176,6 +176,12 @@ describe("pageText budget and text", () => {
     expect(text.slice(text.indexOf("\nText:\n") + 7).split("\n")).toEqual(["| Inbox zero", "| ReplyForward"]);
   });
 
+  it("T14: a closed folder reads collapsed, an open one expanded, a closed ARIA control as before; near names the card", () => {
+    const text = pageText(page([control(1, "button", "Lyda", { expanded: false, list: true }), control(2, "button", "Menu", { expanded: true }), control(3, "combobox", "From", { expanded: false }),
+      control(4, "button", "like", { near: "Karla @bernardine" }), control(5, "button", "Vina")]));
+    expect(controlLines(text)).toEqual(['[0:1] button "Lyda" (collapsed)', '[0:2] button "Menu" (expanded)', '[0:3] combobox "From"', '[0:4] button "like" near "Karla @bernardine"', '[0:5] button "Vina"']);
+  });
+
   it("T6: a repeated line with a number, such as a price, stays", () => {
     expect(pageText(page([], "$19.99\nAdd to cart\n$19.99\nAdd to cart"))).toMatch(/Text:\n\| \$19\.99\n\| Add to cart\n\| \$19\.99$/);
   });
