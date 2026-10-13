@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Icons</title>
+    <style>
+      /* P23: icons a script makes clickable, like MiniWoB's social-media and email-inbox. */
+      .bar span, .send { display: inline-block; width: 16px; height: 16px; margin: 2px 6px; }
+      .reply { content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3C/svg%3E"); }
+      .like { content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='12' height='12'/%3E%3C/svg%3E"); }
+      .more { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='2'/%3E%3C/svg%3E"); }
+      /* The pointer shows only on hover, as on MiniWoB's social-media page. */
+      .bar span:hover, .bar ul:hover { cursor: pointer; }
+      .menu { list-style: none; margin: 0; padding: 2px; border: 1px solid #999; }
+      #send-forward { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M0 0L16 8L0 16z'/%3E%3C/svg%3E"); cursor: pointer; }
+      .glyph::before { content: "\2715"; }
+      .glyph { display: inline-block; width: 16px; cursor: pointer; }
+      .deco { display: inline-block; width: 16px; height: 16px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16'/%3E%3C/svg%3E"); }
+      .hero { display: block; width: 300px; height: 120px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16'/%3E%3C/svg%3E"); }
+      .i2 { display: inline-block; width: 16px; height: 16px; cursor: pointer; content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16'/%3E%3C/svg%3E"); }
+    </style>
+  </head>
+  <body>
+    <h1>Icons</h1>
+    <div class="post"><b>Karla</b> @bernardine
+      <div class="bar"><span class="reply"></span><span class="like"></span><span class="more"></span><ul class="menu" hidden><li class="embed">Embed Tweet</li></ul></div>
+    </div>
+    <div class="post"><b>Odelinda</b> @nieves
+      <div class="bar"><span class="reply"></span><span class="like"></span><span class="more"></span><ul class="menu" hidden><li class="embed">Embed Tweet</li></ul></div>
+    </div>
+    <div id="forward">to: Patience <span id="send-forward" class="send"></span></div>
+    <span class="glyph" aria-label="Delete"></span>
+    <span class="deco decoration"></span>
+    <div class="hero banner"></div>
+    <span class="icon i2"></span>
+    <p>Clicked: <output id="clicked">none</output></p>
+    <script>
+      const out = document.getElementById("clicked");
+      for (const el of document.querySelectorAll(".bar span, .send, .glyph, .hero, .i2, .menu li")) el.addEventListener("click", (e) => {
+        const post = el.closest(".post")?.querySelector("b")?.textContent;
+        out.textContent = `${el.id || el.className}${post ? ` ${post}` : ""}`;
+        if (el.classList.contains("more")) el.parentElement.querySelector(".menu").hidden = false;
+      });
+    </script>
+  </body>
+</html>
