@@ -333,22 +333,22 @@ export async function perform(node: number, request: ActRequest, expect: { guard
     }
     if (op === "click") {
       if (!click()) return refused;
-    } else if (op === "type") {
+    } else if (op === "type" || op === "date") {
+      // A person closes the calendar the field opened: Escape, then a press outside (P16). `date` closes any popup
+      // that opened; `type` of a date closes only a calendar, so an autocomplete list stays open (P27).
+      const shown = op === "date" ? popups : toIso(value) ? calendars : undefined;
+      const before = new Set(shown?.() ?? []);
       const typed = typeText(value);
-      return blocked ? sendsRefused : { ok: true, value: typed };
-    }
-    else if (op === "date") {
-      // A person closes the calendar the field opened: Escape, then a press outside (P16).
-      const before = new Set(popups());
-      const typed = typeText(value);
-      await new Promise((done) => setTimeout(done, 100));
-      const opened = () => popups().filter((p) => !before.has(p));
-      if (opened().length) {
-        const key = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true };
-        e.dispatchEvent(new KeyboardEvent("keydown", key));
-        e.dispatchEvent(new KeyboardEvent("keyup", key));
+      if (shown) {
+        await new Promise((done) => setTimeout(done, 100));
+        const opened = () => shown().filter((p) => !before.has(p));
+        if (opened().length) {
+          const key = { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true };
+          e.dispatchEvent(new KeyboardEvent("keydown", key));
+          e.dispatchEvent(new KeyboardEvent("keyup", key));
+        }
+        if (opened().length) press(document.body, 1, 1, false);
       }
-      if (opened().length) press(document.body, 1, 1, false);
       return blocked ? sendsRefused : { ok: true, value: typed };
     } else if (op === "select" && /^(option|gridcell)$/.test(role)) {
       if (!click()) return refused;

@@ -130,6 +130,15 @@ try {
   const calendarAfter = await call("picker.html", "snapshot");
   check("date in a text field closes the calendar it opened", { ok: true, value: "12/01/2026", days: 0, hidden: true },
     { ok: dated.ok, value: await picker.evaluate(() => document.getElementById("depart").value), days: calendarAfter.controls.filter((c) => c.label.startsWith("Day ")).length, hidden: await picker.evaluate(() => document.getElementById("calendar").hidden) });
+  // P27: fill sends `type` to a date field with no picker mark; a typed date closes the calendar too, other text does not.
+  await picker.evaluate(() => { const d = document.getElementById("depart"); d.blur(); d.value = ""; });
+  const typedDate = await onPicker("Depart", { op: "type", value: "2026-12-02" });
+  const typedAfter = await call("picker.html", "snapshot");
+  check("type of a date closes the calendar it opened", { ok: true, value: "2026-12-02", days: 0, hidden: true },
+    { ok: typedDate.ok, value: await picker.evaluate(() => document.getElementById("depart").value), days: typedAfter.controls.filter((c) => c.label.startsWith("Day ")).length, hidden: await picker.evaluate(() => document.getElementById("calendar").hidden) });
+  await picker.evaluate(() => { const d = document.getElementById("depart"); d.blur(); d.value = ""; });
+  const typedWord = await onPicker("Depart", { op: "type", value: "next week" });
+  check("type of other text leaves the calendar open", { ok: true, hidden: false }, { ok: typedWord.ok, hidden: await picker.evaluate(() => document.getElementById("calendar").hidden) });
   await picker.evaluate(() => { const d = document.getElementById("depart"); d.blur(); d.focus(); });
   const redrawn = await onPicker("Next month", { op: "click" });
   check("a click that redraws its own button in a form is not a destination change", { ok: true, month: "1", url: true },
