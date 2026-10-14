@@ -89,14 +89,15 @@ export async function act(tabId: number, control: Control, request: ActRequest, 
  * Waits for the frame to be quiet: no DOM change for 120 ms, at most 1.5 s.
  * With `listFor` (a field's node), it first waits up to 600 ms for the
  * field's suggestion list. Returns the ms waited. A page that navigates
- * away counts as settled.
+ * away counts as settled: the check answers when the page hides, and the
+ * call gives up 300 ms after the cap (P28).
  */
 export async function settle(tabId: number, options: { frameId?: number; listFor?: number } = {}, browser: ScriptingApi = api()): Promise<number> {
   const started = Date.now();
   try {
     const [first] = await limit(browser.scripting.executeScript({
       target: { tabId, frameIds: [options.frameId ?? 0] }, func: quiet, args: [{ listFor: options.listFor }], world: "ISOLATED",
-    }), 3000);
+    }), 1800);
     return typeof first?.result === "number" ? first.result : Date.now() - started;
   } catch {
     return Date.now() - started;

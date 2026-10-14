@@ -285,8 +285,16 @@ try {
     { full: errorDiff.full, error: errorDiff.text.includes("Wrong email or password."), short: errorDiff.text.length < storeText.length / 2 });
   const petsId = /"Pets"=(\d+:\d+)/.exec(storeText)?.[1];
   const pets = failedSignIn.controls.find((c) => c.id === petsId);
-  await call("menu.html", "act", pets, { op: "click" }, failedSignIn);
-  await call("menu.html", "settle", {}).catch(() => 0);
+  // P28: the tab is found before the click, so settle goes to the page that the click unloads.
+  const navSettle = await ext.evaluate(async (url, c, s) => {
+    const tabId = await window.foxpaw.tabFor(url);
+    const acted = await window.foxpaw.act(tabId, c, { op: "click" }, s);
+    const started = performance.now();
+    await window.foxpaw.settle(tabId, {});
+    return { ok: acted.ok, ms: Math.round(performance.now() - started) };
+  }, `${site.url}/menu.html`, pets, failedSignIn);
+  record.navSettleMs = navSettle.ms;
+  check("settle after a click that opens a page returns at once", { ok: true, fast: true }, { ok: navSettle.ok, fast: navSettle.ms < 1000 });
   await new Promise((done) => setTimeout(done, 500));
   const moved = await call("thanks.html", "snapshot");
   const movedDiff = await textOf("changeText", failedSignIn, moved);
