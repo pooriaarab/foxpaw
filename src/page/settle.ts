@@ -5,7 +5,8 @@
 /**
  * Resolves when the DOM has not changed for `quietMs`, or at `capMs`.
  * With `listFor`, it first waits for that field's suggestion list to show
- * options, up to `listMs`. Returns the time it waited, in ms.
+ * options, up to `listMs`. Returns the time it waited, in ms. A page that
+ * hides (a navigation) answers at once: its DOM never goes quiet (P28).
  */
 export function quiet(options: { listFor?: number; listMs?: number; quietMs?: number; capMs?: number }): Promise<number> {
   const { listFor, listMs = 600, quietMs = 120, capMs = 1500 } = options;
@@ -19,6 +20,15 @@ export function quiet(options: { listFor?: number; listMs?: number; quietMs?: nu
       }
     });
     observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+    let ended = false;
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      observer.disconnect();
+      removeEventListener("pagehide", end);
+      resolve(Math.round(performance.now() - started));
+    };
+    addEventListener("pagehide", end);
     const field = listFor === undefined ? null : window.__foxpaw?.nodes.get(listFor);
     const hasOptions = () => {
       if (!field) return true;
@@ -27,13 +37,10 @@ export function quiet(options: { listFor?: number; listMs?: number; quietMs?: nu
         .some((o) => o.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })));
     };
     const step = () => {
+      if (ended) return;
       const now = performance.now();
       const listed = hasOptions() || now - started >= listMs;
-      if ((listed && now - last >= quietMs && now - started >= quietMs) || now - started >= capMs) {
-        observer.disconnect();
-        resolve(Math.round(now - started));
-        return;
-      }
+      if ((listed && now - last >= quietMs && now - started >= quietMs) || now - started >= capMs) return end();
       setTimeout(step, 30);
     };
     setTimeout(step, 30);
