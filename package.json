@@ -1,7 +1,7 @@
 {
   "name": "foxpaw",
   "version": "0.1.15",
-  "description": "Read a web page, act on it like a person, and check the result, from a Firefox extension.",
+  "description": "Firefox browser automation for extensions: page snapshots, form filling, GLiNER2 choosers, stale-action checks, and result verification.",
   "type": "module",
   "license": "MIT",
   "author": "Pooria Arab",
@@ -42,5 +42,22 @@
     "create-foxkit": "^0.1.0",
     "esbuild": "^0.28.2",
     "web-ext": "^10.7.0"
-  }
+  },
+  "keywords": [
+    "firefox",
+    "webextensions",
+    "browser-automation",
+    "form-filling",
+    "page-snapshot",
+    "accessibility",
+    "shadow-dom",
+    "typescript",
+    "gliner2",
+    "foxmind",
+    "rule-chooser",
+    "result-verification",
+    "autocomplete",
+    "date-picker",
+    "browser-agent"
+  ]
 }
