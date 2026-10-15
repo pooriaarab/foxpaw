@@ -35,6 +35,19 @@ try {
   check("checkbox state is read", false, by("I accept the terms")?.checked);
   check("disabled submit is marked", { submit: true, disabled: true }, { submit: by("Create account")?.submit, disabled: by("Create account")?.disabled });
 
+  // P27: section() reads each control's named container without walking the page, and a deep page reads fast.
+  await open("sections.html");
+  const sectioned = await call("sections.html", "snapshot");
+  check("a control reads the section it sits in", {
+    "Card number": "Billing details", Street: "Shipping address", Delete: "Confirm delete", Password: "Sign in", Home: "Main menu", "Outside a section": "",
+  }, Object.fromEntries(sectioned.controls.map((c) => [c.label, c.section])));
+  await open("deep.html");
+  const startedAt = Date.now();
+  const deep = await call("deep.html", "snapshot");
+  const took = Date.now() - startedAt;
+  record.deepReadMs = took;
+  check("a deep page with 300 controls reads in under 800 ms", { controls: 300, fast: true }, { controls: deep.controls.length, fast: took < 800 });
+
   // Act
   const page = await open("act.html");
   const act = async (label, request, before) => {
