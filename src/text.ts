@@ -5,8 +5,13 @@
 // it formats Snapshots (docs/failure-modes.md T1-T7, D1-D5).
 import type { Control, Snapshot } from "./types.js";
 
-/** `maxControls`: the most controls; a folded link counts as a quarter. Default: 40. */
-export interface PageTextOptions { maxControls?: number }
+/**
+ * `maxControls`: the most controls; a folded link counts as a quarter. Default: 40.
+ * `focus`: a text, such as the goal. Instead of the first `maxControls`, the page keeps its
+ * submit buttons and fields, the 20 controls that share the most words with the focus, and
+ * the 10 text lines that do. Default: off (T15).
+ */
+export interface PageTextOptions { maxControls?: number; focus?: string }
 /** `target`: the id of the control the action used. Its line is always in the diff. */
 export interface ChangeOptions extends PageTextOptions { target?: string }
 
@@ -15,7 +20,7 @@ export interface Change { full: boolean; text: string }
 
 // A run of FOLD_RUN short links folds. SHORT is the most characters of a short
 // label or text line. A diff holds at most DIFF_TEXT characters of new text (D1).
-const MAX_CONTROLS = 40, FOLD_RUN = 5, SHORT = 40, DIFF_TEXT = 1200;
+const MAX_CONTROLS = 40, FOLD_RUN = 5, SHORT = 40, DIFF_TEXT = 1200, FOCUS_CONTROLS = 20, FOCUS_TEXT = 10;
 const FIELDS = new Set(["textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "spinbutton"]);
 /** Text that reads as an error or an alert is never deduped or dropped (T6). */
 const ALERT = /\b(?:error|errors|invalid|required|must|incorrect|wrong|failed|denied|declined|not valid|please|warning|alert)\b/i;
@@ -104,6 +109,31 @@ function items(page: Snapshot): Item[] {
 const rank = (item: Item): number => "fold" in item ? 2 : item.control.submit ? -1
   : FIELDS.has(item.control.role) || item.control.dialog ? 0 : item.control.offscreen ? 3 : 1;
 
+/** A submit button, a field or an open dialog: a focus never drops it. */
+const sure = (item: Item) => "control" in item && (item.control.submit || FIELDS.has(item.control.role) || item.control.dialog);
+
+/** The stemmed words of a text: lower case, with a trailing es, s, ing or ed cut off (T15). */
+const stems = (text: string): string[] => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+  .map((w) => w.length > 4 ? w.replace(/(?:ing|ed|es|s)$/, "") : w.length > 3 ? w.replace(/s$/, "") : w);
+
+/** The words a control answers to: label, near, section, name, placeholder and options. */
+const words = (item: Item): Set<string> => new Set((("fold" in item ? item.fold : [item.control]))
+  .flatMap((c) => stems([c.label, c.near, c.section, c.name, c.placeholder, ...(c.options ?? []).map((o) => o.label)].join(" "))));
+
+/**
+ * A scorer for the focus: the idf-weighted count of the focus words that a text shares.
+ * Idf counts the controls of this page, so a word that most controls share weighs little.
+ */
+function scorer(focus: string, controls: Set<string>[]): (text: Set<string>) => number {
+  const want = new Set(stems(focus));
+  const idf = new Map([...want].map((w) => [w, Math.log(1 + controls.length / (1 + controls.filter((c) => c.has(w)).length))]));
+  return (text) => [...want].reduce((sum, w) => sum + (text.has(w) ? idf.get(w)! : 0), 0);
+}
+
+/** The best `n` of `list` by score, then by `tie`, then by page order; returned as a set (T15). */
+const best = <T>(list: T[], n: number, score: (t: T) => number, tie: (t: T) => number = () => 0): Set<T> =>
+  new Set(list.map((t, i) => [t, i] as const).toSorted((a, b) => score(b[0]) - score(a[0]) || tie(a[0]) - tie(b[0]) || a[1] - b[1]).slice(0, n).map(([t]) => t));
+
 /**
  * The page as text for a planner: the title, the address, up to 40 controls
  * and the visible text. A menu folds to one line that names each link and
@@ -114,14 +144,18 @@ const rank = (item: Item): number => "fold" in item ? 2 : item.control.submit ? 
 export function pageText(page: Snapshot, options: PageTextOptions = {}): string {
   const max = options.maxControls ?? MAX_CONTROLS;
   const all = items(page);
+  const focus = options.focus?.trim();
+  const score = focus ? scorer(focus, all.map(words)) : undefined;
   let room = max;
-  const picked = new Set(all.map((item, i) => [item, i] as const).toSorted((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+  const ranked = score && best(all.filter((item) => !sure(item)), FOCUS_CONTROLS, (item) => score(words(item)), rank);
+  const first = () => all.map((item, i) => [item, i] as const).toSorted((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
     .map(([item]) => item).filter((item) => {
       const cost = "fold" in item ? Math.ceil(item.fold.length / 4) : 1;
       if (cost > room) return false;
       room -= cost;
       return true;
-    }));
+    });
+  const picked = new Set(ranked ? all.filter((item) => sure(item) || ranked.has(item)) : first());
   const kept = all.filter((item) => picked.has(item));
   const left = all.filter((item) => !picked.has(item)).reduce((n, item) => n + ("fold" in item ? item.fold.length : 1), 0);
   const lines = kept.map((item) => ("fold" in item ? foldLine(item.fold) : line(item.control)));
@@ -140,7 +174,7 @@ export function pageText(page: Snapshot, options: PageTextOptions = {}): string 
     return can[s.length] === true;
   };
   const seen = new Set<string>();
-  const text = units(page.text).filter((unit) => {
+  const candidates = units(page.text).filter((unit) => {
     if (wrapped(unit) || ALERT.test(unit)) return true;
     if (!/[\p{L}\p{N}]/u.test(unit)) return false;
     if (shown.has(unit)) return false;
@@ -151,6 +185,9 @@ export function pageText(page: Snapshot, options: PageTextOptions = {}): string 
     seen.add(unit);
     return true;
   });
+  // With a focus, a wrapped or alert unit stays; of the rest, only the best FOCUS_TEXT (T15).
+  const chosen = score && best(candidates.filter((unit) => !wrapped(unit) && !ALERT.test(unit)), FOCUS_TEXT, (unit) => score(new Set(stems(unit))));
+  const text = chosen ? candidates.filter((unit) => wrapped(unit) || ALERT.test(unit) || chosen.has(unit)) : candidates;
   return [`Title: ${quote(page.title)}`, `Address: ${page.url}`, "Controls:", ...lines, "Text:", ...text.map(show)].join("\n");
 }
 
