@@ -313,6 +313,20 @@ try {
   const movedDiff = await textOf("changeText", failedSignIn, moved);
   check("a folded link works by the id in the text, and a navigation gives the whole page", { full: true, url: true, folded: true }, { full: movedDiff.full, url: moved.url.includes("thanks.html?c=7"), folded: !storeText.includes('link "Pets"') });
 
+  // F1: with a focus text, pageText keeps the control the goal names though it is past the 40-control cap.
+  await open("focus.html");
+  const catalog = await call("focus.html", "snapshot");
+  const mystery = catalog.controls.find((c) => c.label === "Mystery");
+  const plain = await textOf("pageText", catalog);
+  const focused = await textOf("pageText", catalog, { focus: "Find the mystery books" });
+  const unfocused = await textOf("pageText", catalog, { focus: undefined });
+  const both = (t) => ({ target: t.includes(`[${mystery.id}] button "Mystery"`), over: t.length > 3500 });
+  check("pageText without focus drops the named control past the cap", { target: false, over: true }, both(plain));
+  record.focusChars = { plain: plain.length, focused: focused.length };
+  check("pageText with focus keeps the named control", { target: true, short: true, more: true },
+    { target: focused.includes(`[${mystery.id}] button "Mystery"`), short: focused.length < 1500, more: /\.\.\. \d+ more controls/.test(focused) });
+  check("pageText with focus unset equals the text without it", true, plain === unfocused);
+
   // Run: snapshot -> choose -> stale check -> act -> settle -> verify, with ruleChooser.
   const runs = (record.runs = {});
   const run = async (path, goal, options) => {
