@@ -97,10 +97,11 @@ export function readFrame(): FrameRead | null {
   };
   const section = (e: Element): string => {
     for (let p = e.parentElement; p && p !== document.body; p = p.parentElement) {
+      if (!/^(FORM|FIELDSET|SECTION|DIALOG|NAV|ASIDE|MAIN)$/.test(p.tagName) && p.getAttribute("role") !== "dialog") continue;
+      // The heading is a direct child, so look at the children, not the whole subtree.
       const named = p.getAttribute("aria-label") ||
-        p.querySelector(":scope>h1,:scope>h2,:scope>h3,:scope>legend")?.textContent?.trim() || "";
-      if (named && /^(FORM|FIELDSET|SECTION|DIALOG|NAV|ASIDE|MAIN)$/.test(p.tagName)) return named.slice(0, 70);
-      if (p.getAttribute("role") === "dialog" && named) return named.slice(0, 70);
+        [...p.children].find((c) => /^(H1|H2|H3|LEGEND)$/.test(c.tagName))?.textContent?.trim() || "";
+      if (named) return named.slice(0, 70);
     }
     return "";
   };

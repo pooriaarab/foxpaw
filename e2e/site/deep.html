@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Deep</title>
+  </head>
+  <body>
+    <!-- 300 buttons 20 levels down; each level holds 250 other nodes, so every ancestor has a large subtree. -->
+    <script>
+      let level = document.body;
+      for (let depth = 0; depth < 20; depth++) {
+        const box = document.createElement("div");
+        for (let i = 0; i < 250; i++) box.append(document.createElement("span"));
+        level.append(box);
+        level = box;
+      }
+      for (let i = 0; i < 300; i++) {
+        const button = document.createElement("button");
+        button.textContent = "Item " + i;
+        level.append(button);
+      }
+    </script>
+  </body>
+</html>
