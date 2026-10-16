@@ -1,6 +1,6 @@
 {
   "name": "foxpaw",
-  "version": "0.1.18",
+  "version": "0.1.17",
   "description": "Firefox browser automation for extensions: page snapshots, form filling, GLiNER2 choosers, stale-action checks, and result verification.",
   "type": "module",
   "license": "MIT",
