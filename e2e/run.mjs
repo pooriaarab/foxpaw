@@ -6,6 +6,8 @@ import { launch, serve, writeArtifact } from "create-foxkit/e2e";
 
 const record = { startedAt: new Date().toISOString(), checks: [] };
 /** True for an act result that foxpaw gave up on after its time limit. */
+/** The act ops that set a value, so a second run of one leaves the page as one run does. */
+const repeatable = new Set(["type", "select", "date"]);
 const isLate = (r) => r?.reason === "navigated" && /did not answer/.test(r.detail ?? "");
 const startedMs = Date.now();
 const check = (name, expected, actual) => {
@@ -31,10 +33,12 @@ try {
     return window.foxpaw[f](tabId, ...a);
   }, `${site.url}/${path}`, fn, rest);
   // A loaded remote browser can answer an act after foxpaw's 5 s limit. That is a timing failure, not a page
-  // failure, so a remote run asks again, up to twice. A local run never asks again.
+  // failure, so a remote run asks again, up to twice. The late first act can still land, so only an op that sets
+  // a value is asked again: doing it twice gives the same page. A click or enter could send twice, so it is never
+  // asked again. A local run never asks again.
   const call = async (path, fn, ...rest) => {
     let result = await callOnce(path, fn, ...rest);
-    if (remote && fn === "act") {
+    if (remote && fn === "act" && repeatable.has(rest[1]?.op)) {
       for (let again = 0; again < 2 && isLate(result); again++) result = await callOnce(path, fn, ...rest);
     }
     return result;
