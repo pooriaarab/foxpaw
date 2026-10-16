@@ -30,7 +30,7 @@ function fakePage() {
   const acted: { node: number; request: ActRequest }[] = [];
   let rawReads = 0;
   const raw = (): FrameRead => ({
-    url: page.url, title: "Fixture", text: page.sent ? "Thanks" : RAW_TEXT, headings: [], key: "k", captcha: false, more: false,
+    url: page.url, title: "Fixture", text: page.sent ? "Thanks" : RAW_TEXT, headings: [], key: "k", captcha: false, more: false, errors: [],
     controls: page.sent ? [] : page.controls.map((c) => ({ ...c })),
   });
   const browser: NonNullable<RunOptions["browser"]> = {
@@ -71,7 +71,7 @@ function shieldRead(fake: ReturnType<typeof fakePage>) {
     reads.push(tabId);
     const r = fake.raw();
     return {
-      url: r.url, title: r.title, text: fake.page.sent ? r.text : "Sign up", headings: [], captcha: false, more: false,
+      url: r.url, title: r.title, text: fake.page.sent ? r.text : "Sign up", headings: [], captcha: false, more: false, errors: [],
       frames: [{ frameId: 0, url: r.url, key: r.key, documentId: "doc" }],
       controls: r.controls.filter((c) => c.node !== HIDDEN).map((c) => ({ ...c, popupFor: undefined, id: `0:${c.node}`, frameId: 0 })),
     };

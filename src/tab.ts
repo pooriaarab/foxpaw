@@ -56,7 +56,7 @@ export async function snapshot(tabId: number, browser: ScriptingApi = api()): Pr
   }
   return {
     url: top.url, title: top.title, text: top.text, headings: top.headings, controls, frames,
-    captcha: reads.some((r) => r.result.captcha), more: top.more,
+    captcha: reads.some((r) => r.result.captcha), more: top.more, errors: reads.flatMap((r) => r.result.errors),
   };
 }
 

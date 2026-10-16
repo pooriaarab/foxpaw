@@ -16,7 +16,7 @@ const c = (label: string, more: Partial<Control> = {}): Control => {
   };
 };
 const page = (controls: Control[], more: Partial<Snapshot> = {}): Snapshot => ({
-  url: "http://fixture/", title: "Fixture", text: "", headings: [], controls, captcha: false, more: false,
+  url: "http://fixture/", title: "Fixture", text: "", headings: [], controls, captcha: false, more: false, errors: [],
   frames: [{ frameId: 0, url: "http://fixture/", key: "k", documentId: "doc" }], ...more,
 });
 const ok: ActResult = { ok: true };
