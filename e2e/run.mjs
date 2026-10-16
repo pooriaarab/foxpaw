@@ -32,8 +32,9 @@ try {
   // failure, so a remote run asks again, up to twice. A local run never asks again.
   const call = async (path, fn, ...rest) => {
     let result = await callOnce(path, fn, ...rest);
-    for (let again = 0; remote && fn === "act" && again < 2 && result?.reason === "navigated" && /did not answer/.test(result.detail ?? ""); again++) {
-      result = await callOnce(path, fn, ...rest);
+    const late = (r) => r?.reason === "navigated" && /did not answer/.test(r.detail ?? "");
+    if (remote && fn === "act") {
+      for (let again = 0; again < 2 && late(result); again++) result = await callOnce(path, fn, ...rest);
     }
     return result;
   };
