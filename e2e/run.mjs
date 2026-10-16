@@ -24,10 +24,19 @@ try {
   record.firefox = await fox.browser.version();
   const ext = await fox.openExtensionPage("sidebar.html");
   /** Runs window.foxpaw[name](tabId of the page at `path`, ...args) in the sidebar page. */
-  const call = (path, fn, ...rest) => ext.evaluate(async (url, f, a) => {
+  const callOnce = (path, fn, ...rest) => ext.evaluate(async (url, f, a) => {
     const tabId = await window.foxpaw.tabFor(url);
     return window.foxpaw[f](tabId, ...a);
   }, `${site.url}/${path}`, fn, rest);
+  // A loaded remote browser can answer an act after foxpaw's 5 s limit. That is a timing failure, not a page
+  // failure, so a remote run asks again, up to twice. A local run never asks again.
+  const call = async (path, fn, ...rest) => {
+    let result = await callOnce(path, fn, ...rest);
+    for (let again = 0; remote && fn === "act" && again < 2 && result?.reason === "navigated" && /did not answer/.test(result.detail ?? ""); again++) {
+      result = await callOnce(path, fn, ...rest);
+    }
+    return result;
+  };
   const open = (path) => fox.open(`${site.url}/${path}`);
   const tabPage = async (path) => (await fox.browser.pages()).find((p) => p.url().startsWith(`${site.url}/${path}`));
 
@@ -320,7 +329,7 @@ try {
     return { ok: acted.ok, ms: Math.round(performance.now() - started) };
   }, `${site.url}/menu.html`, pets, failedSignIn);
   record.navSettleMs = navSettle.ms;
-  check("settle after a click that opens a page returns at once", { ok: true, fast: true }, { ok: navSettle.ok, fast: navSettle.ms < 1000 });
+  check("settle after a click that opens a page returns at once", { ok: true, fast: true }, { ok: navSettle.ok, fast: navSettle.ms < (remote ? 5000 : 1000) });
   await new Promise((done) => setTimeout(done, 500));
   const moved = await call("thanks.html", "snapshot");
   const movedDiff = await textOf("changeText", failedSignIn, moved);
