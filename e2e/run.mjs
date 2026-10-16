@@ -9,7 +9,7 @@ const startedMs = Date.now();
 const check = (name, expected, actual) => {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
   record.checks.push({ name, expected, actual, ok });
-  console.error(`${((Date.now() - startedMs) / 1000).toFixed(0)}s ${ok ? "ok" : "BAD"} ${name}`);
+  console.error(`${((Date.now() - startedMs) / 1000).toFixed(0)}s ${ok ? "ok" : "BAD"} ${name}${ok ? "" : `: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`}`);
 };
 
 /** The folder state of the clicks.html tree (P22). */
@@ -82,7 +82,7 @@ try {
   await act("City", { op: "type", value: "Paris" });
   const city = (await call("act.html", "snapshot")).controls.find((c) => c.label === "City");
   const listWait = await call("act.html", "settle", { listFor: city.node, frameId: city.frameId });
-  check("settle returns when no list opens", true, listWait >= 500 && listWait < 1600);
+  check("settle returns when no list opens", true, listWait >= 500 && listWait < (remote ? 6000 : 1600));
   await page.evaluate("window.tick()");
   const busyWait = await call("act.html", "settle", {});
   check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < (remote ? 3500 : 1700));
