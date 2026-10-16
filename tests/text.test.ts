@@ -22,7 +22,7 @@ function load(name: string): Snapshot {
     return { ...c, id: `0:${c.node}`, frameId: 0, ...(c.role === "link" && typeof guard[7] === "string" ? { href: guard[7] } : {}),
       ...(row && row !== NO_ROW ? { row } : {}) } as Control;
   });
-  return { url: read.url, title: read.title, text: read.text, headings: read.headings, controls, frames: [{ frameId: 0, url: read.url, key: read.key, documentId: "doc-1" }], captcha: read.captcha, more: read.more };
+  return { url: read.url, title: read.title, text: read.text, headings: read.headings, controls, frames: [{ frameId: 0, url: read.url, key: read.key, documentId: "doc-1" }], captcha: read.captcha, more: read.more, errors: read.errors ?? [] };
 }
 
 /** foxloop's page text before this change, to measure against. */
@@ -37,7 +37,7 @@ const control = (node: number, role: string, label: string, more: Partial<Contro
   picker: false, secret: false, guard: `g${node}`, ...(role === "link" ? { href: `/${label}` } : {}), ...more,
 });
 const page = (controls: Control[], text = "", more: Partial<Snapshot> = {}): Snapshot => ({
-  url: "https://shop.example/", title: "Shop", text, headings: [], controls, captcha: false, more: false,
+  url: "https://shop.example/", title: "Shop", text, headings: [], controls, captcha: false, more: false, errors: [],
   frames: [{ frameId: 0, url: "https://shop.example/", key: JSON.stringify([1, "https://shop.example/", []]), documentId: "doc-1" }], ...more,
 });
 /** The control lines and fold lines of a page text. */

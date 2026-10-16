@@ -87,6 +87,11 @@ export interface Snapshot {
   captcha: boolean;
   /** The page can scroll down. */
   more: boolean;
+  /**
+   * The page's error signals, every frame: the text of visible [role=alert] and [aria-live=assertive] elements, and
+   * "<label>: invalid" for each visible field marked aria-invalid="true". Up to 10 per frame.
+   */
+  errors: string[];
 }
 /** What `act` can do to a control. */
 export type Operation = "click" | "type" | "select" | "check" | "uncheck" | "date" | "enter" | "scroll";
