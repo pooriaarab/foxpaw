@@ -26,8 +26,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm ci:local
   e2e:
+    # A fork's pull request gets no secrets, so it has no Ichabod key and cannot run this job.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Each call crosses the network to a shared remote browser. A loaded one takes about 10 s per check,
+    # so the 77 checks can take 15 minutes. 30 minutes leaves room and still stops a hung run.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -36,10 +40,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
-        id: firefox
-        with:
-          firefox-version: latest
+      # The browser is on Ichabod; cloudflared lets it reach the pages the test serves.
+      - run: |
+          sudo curl -fsSL -o /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.10.0/cloudflared-linux-amd64
+          echo "d33ff2d14475178d2012c2c56beba87389ac5ded27649519f198a7d3134a99db  /usr/local/bin/cloudflared" | sha256sum -c -
+          sudo chmod +x /usr/local/bin/cloudflared
       - run: pnpm e2e
         env:
-          FIREFOX: ${{ steps.firefox.outputs.firefox-path }}
+          FOXKIT_BROWSER: ichabod
+          ICHABOD_API_KEY: ${{ secrets.ICHABOD_API_KEY }}

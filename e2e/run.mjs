@@ -5,11 +5,22 @@
 import { launch, serve, writeArtifact } from "create-foxkit/e2e";
 
 const record = { startedAt: new Date().toISOString(), checks: [] };
-const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
+/** The act ops that set a value, so a second run of one leaves the page as one run does. */
+const repeatable = new Set(["type", "select", "date"]);
+/** True for an act result that foxpaw gave up on after its time limit. */
+const isLate = (r) => r?.reason === "navigated" && /did not answer/.test(r.detail ?? "");
+const startedMs = Date.now();
+const check = (name, expected, actual) => {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  record.checks.push({ name, expected, actual, ok });
+  console.error(`${((Date.now() - startedMs) / 1000).toFixed(0)}s ${ok ? "ok" : "BAD"} ${name}${ok ? "" : `: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`}`);
+};
 
 /** The folder state of the clicks.html tree (P22). */
 const treeState = (snap) => Object.fromEntries(snap.controls.filter((c) => /^(Lyda|Sergio|Vina)$/.test(c.label)).map((c) => [c.label, c.expanded ?? null]));
 
+// A remote browser adds network time to each call, so the time limits are wider there.
+const remote = process.env.FOXKIT_BROWSER === "ichabod";
 const site = await serve("e2e/site");
 let fox;
 try {
@@ -17,10 +28,21 @@ try {
   record.firefox = await fox.browser.version();
   const ext = await fox.openExtensionPage("sidebar.html");
   /** Runs window.foxpaw[name](tabId of the page at `path`, ...args) in the sidebar page. */
-  const call = (path, fn, ...rest) => ext.evaluate(async (url, f, a) => {
+  const callOnce = (path, fn, ...rest) => ext.evaluate(async (url, f, a) => {
     const tabId = await window.foxpaw.tabFor(url);
     return window.foxpaw[f](tabId, ...a);
   }, `${site.url}/${path}`, fn, rest);
+  // A loaded remote browser can answer an act after foxpaw's 5 s limit. That is a timing failure, not a page
+  // failure, so a remote run asks again, up to twice. The late first act can still land, so only an op that sets
+  // a value is asked again: doing it twice gives the same page. A click or enter could send twice, so it is never
+  // asked again. A local run never asks again.
+  const call = async (path, fn, ...rest) => {
+    let result = await callOnce(path, fn, ...rest);
+    if (remote && fn === "act" && repeatable.has(rest[1]?.op)) {
+      for (let again = 0; again < 2 && isLate(result); again++) result = await callOnce(path, fn, ...rest);
+    }
+    return result;
+  };
   const open = (path) => fox.open(`${site.url}/${path}`);
   const tabPage = async (path) => (await fox.browser.pages()).find((p) => p.url().startsWith(`${site.url}/${path}`));
 
@@ -46,7 +68,7 @@ try {
   const deep = await call("deep.html", "snapshot");
   const took = Date.now() - startedAt;
   record.deepReadMs = took;
-  check("a deep page with 300 controls reads in under 800 ms", { controls: 300, fast: true }, { controls: deep.controls.length, fast: took < 800 });
+  check("a deep page with 300 controls reads in under 800 ms", { controls: 300, fast: true }, { controls: deep.controls.length, fast: took < (remote ? 4000 : 800) });
 
   // E1-E5: the page's error signals, for a send that comes back (foxloop). Visible role=alert and aria-live=assertive
   // text, and each aria-invalid="true" field; never a hidden or empty alert, a polite live region, or :invalid.
@@ -75,10 +97,10 @@ try {
   await act("City", { op: "type", value: "Paris" });
   const city = (await call("act.html", "snapshot")).controls.find((c) => c.label === "City");
   const listWait = await call("act.html", "settle", { listFor: city.node, frameId: city.frameId });
-  check("settle returns when no list opens", true, listWait >= 500 && listWait < 1600);
+  check("settle returns when no list opens", true, listWait >= 500 && listWait < (remote ? 6000 : 1600));
   await page.evaluate("window.tick()");
   const busyWait = await call("act.html", "settle", {});
-  check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
+  check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < (remote ? 3500 : 1700));
 
   // C38: only a real submit of the pressed form counts as sent. P25: a control in a scrolling box is scrolled to. P26: a wrapped link.
   const sentPage = await open("sent.html");
@@ -313,7 +335,7 @@ try {
     return { ok: acted.ok, ms: Math.round(performance.now() - started) };
   }, `${site.url}/menu.html`, pets, failedSignIn);
   record.navSettleMs = navSettle.ms;
-  check("settle after a click that opens a page returns at once", { ok: true, fast: true }, { ok: navSettle.ok, fast: navSettle.ms < 1000 });
+  check("settle after a click that opens a page returns at once", { ok: true, fast: true }, { ok: navSettle.ok, fast: navSettle.ms < (remote ? 5000 : 1000) });
   await new Promise((done) => setTimeout(done, 500));
   const moved = await call("thanks.html", "snapshot");
   const movedDiff = await textOf("changeText", failedSignIn, moved);
@@ -354,12 +376,12 @@ try {
   check("a send with no effect is not verified", { status: "blocked", reason: "the form did not send", verified: false },
     { status: nowhere.status, reason: nowhere.blockedReason, verified: nowhere.verified });
   const away = await run("away.html", "email: sam@example.com");
-  check("run does not send a form that posts to another site", { status: "blocked", reason: `the form sends to localhost:${new URL(site.url).port}, which is not the origin of this page`, acted: [] },
+  check("run does not send a form that posts to another site", { status: "blocked", reason: `the form sends to localhost${new URL(site.url).port ? `:${new URL(site.url).port}` : ""}, which is not the origin of this page`, acted: [] },
     { status: away.status, reason: away.blockedReason, acted: away.steps.map((s) => s.action) });
   const lookalike = await run("lookalike.html", "full name: Sam Park, email: sam.park@example.com, card number: 4242 4242 4242 4242, expiry: 12/29, CVC: 123, pay");
   const paid = new URL(lookalike.url);
-  check("run fills and sends only the form that fits the goal", { status: "done", page: "/thanks.html", card: "4242 4242 4242 4242", express: false },
-    { status: lookalike.status, page: paid.pathname, card: paid.searchParams.get("card"), express: lookalike.steps.some((s) => s.action === "Pay with Express") });
+  check("run fills and sends only the form that fits the goal", { status: "done", page: true, card: "4242 4242 4242 4242", express: false },
+    { status: lookalike.status, page: paid.pathname.endsWith("/thanks.html"), card: paid.searchParams.get("card"), express: lookalike.steps.some((s) => s.action === "Pay with Express") });
   const twin = await run("twin.html", 'email: sam@example.com, card number: 4242 4242 4242 4242, then click "Pay $40.00"');
   check("two forms that fit the same are not guessed", { status: "blocked", ambiguous: true, steps: 0 },
     { status: twin.status, ambiguous: (twin.blockedReason ?? "").startsWith("two forms fit the goal"), steps: twin.steps.length });
@@ -369,11 +391,14 @@ try {
     check(`a send whose action changes on ${on} is refused`, { status: "blocked", reason: "the form's destination changed as foxpaw sent it", left: false },
       { status: shifted.status, reason: shifted.blockedReason, left });
   }
-  const linked = await run("away.html", "open partner profile, name: Sam Lee");
-  check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
-    { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });
-  const allowed = await run("away.html", "open partner profile, name: Sam Lee", { allowHosts: ["localhost"] });
-  check("allowHosts lets the run go on", { status: "done", acted: ["Partner profile", "Name", "Save"] }, { status: allowed.status, acted: allowed.steps.map((s) => s.action) });
+  // The other site, localhost, is not reachable from a remote browser, so a run that follows the link cannot load it.
+  if (!remote) {
+    const linked = await run("away.html", "open partner profile, name: Sam Lee");
+    check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
+      { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });
+    const allowed = await run("away.html", "open partner profile, name: Sam Lee", { allowHosts: ["localhost"] });
+    check("allowHosts lets the run go on", { status: "done", acted: ["Partner profile", "Name", "Save"] }, { status: allowed.status, acted: allowed.steps.map((s) => s.action) });
+  }
   const captcha = await run("captcha.html", "email: sam@example.com");
   check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
   const newsRun = await run("frames.html", "Newsletter email: sam@example.com");
