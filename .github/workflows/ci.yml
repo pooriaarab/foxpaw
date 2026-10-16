@@ -26,6 +26,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm ci:local
   e2e:
+    # A fork's pull request gets no secrets, so it has no Ichabod key and cannot run this job.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     # Each call crosses the network to a shared remote browser. A loaded one takes about 10 s per check,
     # so the 77 checks can take 15 minutes. 30 minutes leaves room and still stops a hung run.
