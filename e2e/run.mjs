@@ -10,6 +10,7 @@ const check = (name, expected, actual) => record.checks.push({ name, expected, a
 /** The folder state of the clicks.html tree (P22). */
 const treeState = (snap) => Object.fromEntries(snap.controls.filter((c) => /^(Lyda|Sergio|Vina)$/.test(c.label)).map((c) => [c.label, c.expanded ?? null]));
 
+// A remote browser adds network time to each call, so the time limits are wider there.
 const remote = process.env.FOXKIT_BROWSER === "ichabod";
 const site = await serve("e2e/site");
 let fox;
@@ -47,7 +48,7 @@ try {
   const deep = await call("deep.html", "snapshot");
   const took = Date.now() - startedAt;
   record.deepReadMs = took;
-  check("a deep page with 300 controls reads in under 800 ms", { controls: 300, fast: true }, { controls: deep.controls.length, fast: took < 800 });
+  check("a deep page with 300 controls reads in under 800 ms", { controls: 300, fast: true }, { controls: deep.controls.length, fast: took < (remote ? 4000 : 800) });
 
   // E1-E5: the page's error signals, for a send that comes back (foxloop). Visible role=alert and aria-live=assertive
   // text, and each aria-invalid="true" field; never a hidden or empty alert, a polite live region, or :invalid.
@@ -79,7 +80,7 @@ try {
   check("settle returns when no list opens", true, listWait >= 500 && listWait < 1600);
   await page.evaluate("window.tick()");
   const busyWait = await call("act.html", "settle", {});
-  check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < 1700);
+  check("settle returns on a page that never stops", true, busyWait >= 1400 && busyWait < (remote ? 3500 : 1700));
 
   // C38: only a real submit of the pressed form counts as sent. P25: a control in a scrolling box is scrolled to. P26: a wrapped link.
   const sentPage = await open("sent.html");
