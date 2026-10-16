@@ -5,9 +5,9 @@
 import { launch, serve, writeArtifact } from "create-foxkit/e2e";
 
 const record = { startedAt: new Date().toISOString(), checks: [] };
-/** True for an act result that foxpaw gave up on after its time limit. */
 /** The act ops that set a value, so a second run of one leaves the page as one run does. */
 const repeatable = new Set(["type", "select", "date"]);
+/** True for an act result that foxpaw gave up on after its time limit. */
 const isLate = (r) => r?.reason === "navigated" && /did not answer/.test(r.detail ?? "");
 const startedMs = Date.now();
 const check = (name, expected, actual) => {
@@ -393,11 +393,11 @@ try {
   }
   // The other site, localhost, is not reachable from a remote browser, so a run that follows the link cannot load it.
   if (!remote) {
-  const linked = await run("away.html", "open partner profile, name: Sam Lee");
-  check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
-    { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });
-  const allowed = await run("away.html", "open partner profile, name: Sam Lee", { allowHosts: ["localhost"] });
-  check("allowHosts lets the run go on", { status: "done", acted: ["Partner profile", "Name", "Save"] }, { status: allowed.status, acted: allowed.steps.map((s) => s.action) });
+    const linked = await run("away.html", "open partner profile, name: Sam Lee");
+    check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
+      { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });
+    const allowed = await run("away.html", "open partner profile, name: Sam Lee", { allowHosts: ["localhost"] });
+    check("allowHosts lets the run go on", { status: "done", acted: ["Partner profile", "Name", "Save"] }, { status: allowed.status, acted: allowed.steps.map((s) => s.action) });
   }
   const captcha = await run("captcha.html", "email: sam@example.com");
   check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
