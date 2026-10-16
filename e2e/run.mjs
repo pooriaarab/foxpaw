@@ -5,6 +5,8 @@
 import { launch, serve, writeArtifact } from "create-foxkit/e2e";
 
 const record = { startedAt: new Date().toISOString(), checks: [] };
+/** True for an act result that foxpaw gave up on after its time limit. */
+const isLate = (r) => r?.reason === "navigated" && /did not answer/.test(r.detail ?? "");
 const startedMs = Date.now();
 const check = (name, expected, actual) => {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
@@ -32,9 +34,8 @@ try {
   // failure, so a remote run asks again, up to twice. A local run never asks again.
   const call = async (path, fn, ...rest) => {
     let result = await callOnce(path, fn, ...rest);
-    const late = (r) => r?.reason === "navigated" && /did not answer/.test(r.detail ?? "");
     if (remote && fn === "act") {
-      for (let again = 0; again < 2 && late(result); again++) result = await callOnce(path, fn, ...rest);
+      for (let again = 0; again < 2 && isLate(result); again++) result = await callOnce(path, fn, ...rest);
     }
     return result;
   };
