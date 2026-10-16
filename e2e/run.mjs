@@ -10,6 +10,7 @@ const check = (name, expected, actual) => record.checks.push({ name, expected, a
 /** The folder state of the clicks.html tree (P22). */
 const treeState = (snap) => Object.fromEntries(snap.controls.filter((c) => /^(Lyda|Sergio|Vina)$/.test(c.label)).map((c) => [c.label, c.expanded ?? null]));
 
+const remote = process.env.FOXKIT_BROWSER === "ichabod";
 const site = await serve("e2e/site");
 let fox;
 try {
@@ -354,12 +355,12 @@ try {
   check("a send with no effect is not verified", { status: "blocked", reason: "the form did not send", verified: false },
     { status: nowhere.status, reason: nowhere.blockedReason, verified: nowhere.verified });
   const away = await run("away.html", "email: sam@example.com");
-  check("run does not send a form that posts to another site", { status: "blocked", reason: `the form sends to localhost:${new URL(site.url).port}, which is not the origin of this page`, acted: [] },
+  check("run does not send a form that posts to another site", { status: "blocked", reason: `the form sends to localhost${new URL(site.url).port ? `:${new URL(site.url).port}` : ""}, which is not the origin of this page`, acted: [] },
     { status: away.status, reason: away.blockedReason, acted: away.steps.map((s) => s.action) });
   const lookalike = await run("lookalike.html", "full name: Sam Park, email: sam.park@example.com, card number: 4242 4242 4242 4242, expiry: 12/29, CVC: 123, pay");
   const paid = new URL(lookalike.url);
-  check("run fills and sends only the form that fits the goal", { status: "done", page: "/thanks.html", card: "4242 4242 4242 4242", express: false },
-    { status: lookalike.status, page: paid.pathname, card: paid.searchParams.get("card"), express: lookalike.steps.some((s) => s.action === "Pay with Express") });
+  check("run fills and sends only the form that fits the goal", { status: "done", page: true, card: "4242 4242 4242 4242", express: false },
+    { status: lookalike.status, page: paid.pathname.endsWith("/thanks.html"), card: paid.searchParams.get("card"), express: lookalike.steps.some((s) => s.action === "Pay with Express") });
   const twin = await run("twin.html", 'email: sam@example.com, card number: 4242 4242 4242 4242, then click "Pay $40.00"');
   check("two forms that fit the same are not guessed", { status: "blocked", ambiguous: true, steps: 0 },
     { status: twin.status, ambiguous: (twin.blockedReason ?? "").startsWith("two forms fit the goal"), steps: twin.steps.length });
@@ -369,11 +370,14 @@ try {
     check(`a send whose action changes on ${on} is refused`, { status: "blocked", reason: "the form's destination changed as foxpaw sent it", left: false },
       { status: shifted.status, reason: shifted.blockedReason, left });
   }
+  // The other site, localhost, is not reachable from a remote browser, so a run that follows the link cannot load it.
+  if (!remote) {
   const linked = await run("away.html", "open partner profile, name: Sam Lee");
   check("run does not act after a link to another site", { status: "blocked", reason: "the page moved to another site", acted: ["Partner profile"] },
     { status: linked.status, reason: linked.blockedReason, acted: linked.steps.map((s) => s.action) });
   const allowed = await run("away.html", "open partner profile, name: Sam Lee", { allowHosts: ["localhost"] });
   check("allowHosts lets the run go on", { status: "done", acted: ["Partner profile", "Name", "Save"] }, { status: allowed.status, acted: allowed.steps.map((s) => s.action) });
+  }
   const captcha = await run("captcha.html", "email: sam@example.com");
   check("captcha page is blocked", { status: "blocked", reason: "captcha", steps: 0 }, { status: captcha.status, reason: captcha.blockedReason, steps: captcha.steps.length });
   const newsRun = await run("frames.html", "Newsletter email: sam@example.com");

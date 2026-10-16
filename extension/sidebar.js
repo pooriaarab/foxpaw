@@ -2,7 +2,13 @@
 // step and the result checklist. It uses ruleChooser: this build bundles no
 // model. The E2E test drives the same code through window.foxpaw, which only
 // the e2e build (build-ext.mjs --e2e) has.
+import { perform } from "../src/page/act.ts";
+import { quiet } from "../src/page/settle.ts";
+import { readFrame } from "../src/page/snapshot.ts";
 import { act, changeText, pageText, runTask, settle, snapshot } from "../src/index.ts";
+
+/** E2E build only: runs a call in the background page (see background.js). */
+const call = (api, method, ...args) => browser.runtime.sendMessage({ foxpawCall: { api, method, args } });
 
 const $ = (id) => document.getElementById(id);
 
@@ -54,4 +60,13 @@ $("goal-form").addEventListener("submit", async (event) => {
   await run(tab.id, $("goal").value).catch((error) => { $("status").textContent = error.message; });
 });
 
-if (__E2E__) window.foxpaw = { snapshot, act, settle, run, tabFor, pageText, changeText };
+if (__E2E__) {
+  // A framed page cannot send a function over the relay, so the background page runs the call (see background.js).
+  const names = new Map([[readFrame, "readFrame"], [perform, "perform"], [quiet, "quiet"]]);
+  const bridge = {
+    scripting: { executeScript: ({ func, ...details }) => call("scripting", "executeScript", { ...details, func: names.get(func) }) },
+    tabGroups: { get: (id) => call("tabGroups", "get", id), update: (id, update) => call("tabGroups", "update", id, update) },
+  };
+  globalThis.browser = new Proxy(browser, { get: (target, key) => bridge[key] ?? target[key] });
+  window.foxpaw = { snapshot, act, settle, run, tabFor, pageText, changeText };
+}
