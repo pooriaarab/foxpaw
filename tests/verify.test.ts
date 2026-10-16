@@ -16,7 +16,7 @@ const c = (label: string, more: Partial<Control> = {}): Control => {
   };
 };
 const page = (controls: Control[], more: Partial<Snapshot> = {}): Snapshot => ({
-  url: "http://fixture/", title: "Sign up", text: "Sign up\nEmail", headings: ["Sign up"], controls, captcha: false, more: false,
+  url: "http://fixture/", title: "Sign up", text: "Sign up\nEmail", headings: ["Sign up"], controls, captcha: false, more: false, errors: [],
   frames: [{ frameId: 0, url: "http://fixture/", key: "k", documentId: "doc" }], ...more,
 });
 /** A run that filled the form and, with `sent`, sent it. */

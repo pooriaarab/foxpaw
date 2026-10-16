@@ -48,6 +48,12 @@ try {
   record.deepReadMs = took;
   check("a deep page with 300 controls reads in under 800 ms", { controls: 300, fast: true }, { controls: deep.controls.length, fast: took < 800 });
 
+  // E1-E5: the page's error signals, for a send that comes back (foxloop). Visible role=alert and aria-live=assertive
+  // text, and each aria-invalid="true" field; never a hidden or empty alert, a polite live region, or :invalid.
+  await open("signals.html");
+  check("error signals are read", ["Enter one email address.", "The subject is too long.", "To: invalid"], (await call("signals.html", "snapshot")).errors);
+  check("a page with no error signal reads none", [], read.errors);
+
   // Act
   const page = await open("act.html");
   const act = async (label, request, before) => {
