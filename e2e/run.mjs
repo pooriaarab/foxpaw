@@ -5,7 +5,12 @@
 import { launch, serve, writeArtifact } from "create-foxkit/e2e";
 
 const record = { startedAt: new Date().toISOString(), checks: [] };
-const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
+const startedMs = Date.now();
+const check = (name, expected, actual) => {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  record.checks.push({ name, expected, actual, ok });
+  console.error(`${((Date.now() - startedMs) / 1000).toFixed(0)}s ${ok ? "ok" : "BAD"} ${name}`);
+};
 
 /** The folder state of the clicks.html tree (P22). */
 const treeState = (snap) => Object.fromEntries(snap.controls.filter((c) => /^(Lyda|Sergio|Vina)$/.test(c.label)).map((c) => [c.label, c.expanded ?? null]));
