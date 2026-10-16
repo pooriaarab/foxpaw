@@ -13,6 +13,7 @@ export interface FrameRead {
   key: string;
   captcha: boolean;
   more: boolean;
+  errors: string[];
   controls: {
     node: number; role: string; tag: string; type: string; label: string; name: string; placeholder: string;
     section: string; value: string; options?: { value: string; label: string; selected: boolean }[];
@@ -358,8 +359,14 @@ export function readFrame(): FrameRead | null {
   const captcha = deep(document, 'iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],' +
     ".g-recaptcha,.h-captcha,.cf-turnstile,[data-captcha]").length > 0 ||
     /\b(?:captcha|i['’]?m not a robot|verify (?:that )?you are (?:a )?human|are you a robot)\b/i.test(`${document.title}\n${text}`);
+  // The page's error signals (E1-E5): visible role=alert and aria-live=assertive text, and each field marked
+  // aria-invalid="true". Not :invalid, which an empty required field on a fresh form also matches.
+  const errors = [
+    ...deep(document, '[role="alert"],[aria-live="assertive"]').filter(visible).map((e) => e.textContent?.replace(/\s+/g, " ").trim().slice(0, 200) || ""),
+    ...deep(document, '[aria-invalid="true"]').filter(visible).map((e) => `${name(e) || e.getAttribute("name") || e.tagName.toLowerCase()}: invalid`),
+  ].filter(Boolean).slice(0, 10);
   return {
-    url: location.href, title: document.title, text, headings, key: cache.key(), captcha,
+    url: location.href, title: document.title, text, headings, key: cache.key(), captcha, errors,
     more: scrollY + innerHeight < document.documentElement.scrollHeight - 2, controls,
   };
 }

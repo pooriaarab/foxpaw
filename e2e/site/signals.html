@@ -1,0 +1,27 @@
+<!doctype html>
+<!--
+  Error signals in the snapshot (foxpaw #153). snapshot().errors must read:
+  E1 the visible text of [role=alert] and [aria-live=assertive] elements;
+  E2 "<label>: invalid" for each visible field with aria-invalid="true";
+  E3 never :invalid or required: an empty required field on a fresh form is not an error;
+  E4 never a hidden or empty alert, or an aria-live="polite" region;
+  E5 [] on a page with none (read.html).
+  E2E checks: "error signals are read", "a page with no error signal reads none".
+-->
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Error signals</title></head>
+  <body>
+    <h1>Send a message</h1>
+    <p class="error" role="alert">Enter one email address.</p>
+    <div aria-live="assertive">The subject is too long.</div>
+    <div role="alert" style="display:none">A hidden alert is not shown.</div>
+    <div role="alert"></div>
+    <div aria-live="polite">Saved a draft.</div>
+    <form>
+      <label for="to">To</label><input id="to" aria-invalid="true" value="Dana Lee &lt;dana&gt;">
+      <label for="subject">Subject</label><input id="subject" required>
+      <label for="body">Message</label><textarea id="body" aria-invalid="false"></textarea>
+      <button type="submit">Send</button>
+    </form>
+  </body>
+</html>

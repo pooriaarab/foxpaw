@@ -13,7 +13,7 @@ const c = (label: string, more: Partial<Control> = {}): Control => {
   };
 };
 const page = (controls: Control[]): Snapshot => ({
-  url: "http://fixture/checkout/pay", title: "Checkout", text: "", headings: [], controls, captcha: false, more: false,
+  url: "http://fixture/checkout/pay", title: "Checkout", text: "", headings: [], controls, captcha: false, more: false, errors: [],
   frames: [{ frameId: 0, url: "http://fixture/checkout/pay", key: "k", documentId: "doc" }],
 });
 const options = { chooser: ruleChooser(), today: TODAY };
